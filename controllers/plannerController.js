@@ -2,6 +2,7 @@
 const HealthProfile = require('../models/HealthProfile');
 const DietPlan = require('../models/DietPlan');
 const WorkoutPlan = require('../models/WorkoutPlan');
+const { validateDietPlan, validateWorkoutPlan } = require('../utils/safetyValidator');
 
 // Helper to calculate Basal Metabolic Rate (BMR) using Mifflin-St Jeor Equation
 const calculateBMR = (weight, height, age, gender) => {
@@ -84,7 +85,7 @@ Respond ONLY with a raw JSON array (no markdown code blocks, no backticks) where
       ];
     }
 
-    const newPlan = await DietPlan.create({
+    const planData = {
       user: req.user._id,
       date: queryDate,
       targetCalories: Math.round(targetCalories),
@@ -92,7 +93,16 @@ Respond ONLY with a raw JSON array (no markdown code blocks, no backticks) where
       targetCarbs: Math.round(targetCarbs),
       targetFats: Math.round(targetFats),
       meals
-    });
+    };
+
+    // STRICT BACKEND SAFETY VALIDATION
+    try {
+      validateDietPlan(planData, profile);
+    } catch (validationError) {
+      return res.status(403).json({ success: false, message: validationError.message });
+    }
+
+    const newPlan = await DietPlan.create(planData);
 
     res.status(201).json({ success: true, plan: newPlan });
   } catch (error) {
@@ -164,13 +174,22 @@ Respond ONLY with a raw JSON object (no markdown, no backticks) exactly matching
       estimatedDuration = 30;
     }
 
-    const newPlan = await WorkoutPlan.create({
+    const planData = {
       user: req.user._id,
       date: queryDate,
       objective,
       estimatedDuration,
       exercises
-    });
+    };
+
+    // STRICT BACKEND SAFETY VALIDATION
+    try {
+      validateWorkoutPlan(planData, profile);
+    } catch (validationError) {
+      return res.status(403).json({ success: false, message: validationError.message });
+    }
+
+    const newPlan = await WorkoutPlan.create(planData);
 
     res.status(201).json({ success: true, plan: newPlan });
   } catch (error) {

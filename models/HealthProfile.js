@@ -46,12 +46,36 @@ const healthProfileSchema = new mongoose.Schema({
   },
   preferredTrainingStyles: [String],
 
-  // D. Medical considerations and restrictions
-  allergies: [String],
-  foodIntolerances: [String],
-  existingInjuries: [String],
-  pastInjuries: [String],
-  movementLimitations: [String],
+  // D. Medical considerations and restrictions (MANDATORY SAFETY)
+  safetyQuestionnaireCompleted: {
+    type: Boolean,
+    default: false
+  },
+  hasFoodAllergies: {
+    type: String,
+    enum: ['yes', 'no', 'unsure'],
+    default: 'unsure'
+  },
+  allergies: [{
+    allergen: String,
+    type: { type: String, enum: ['allergy', 'intolerance'] },
+    severity: String,
+    foodsToAvoid: [String],
+    clinicianAdvice: String
+  }],
+  hasInjuries: {
+    type: String,
+    enum: ['current', 'past', 'no', 'unsure'],
+    default: 'unsure'
+  },
+  injuries: [{
+    bodyPart: String,
+    status: { type: String, enum: ['current', 'historical'] },
+    aggravatingMovements: [String],
+    movementsToAvoid: [String],
+    clinicianAdvice: String,
+    recoveryStatus: String
+  }],
   medicalConditions: [String],
   dietaryRestrictions: [String],
 

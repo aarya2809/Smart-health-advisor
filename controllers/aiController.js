@@ -20,6 +20,16 @@ const generateChatResponse = async (req, res) => {
     
     if (profile) {
       systemInstruction += `\nUser Profile context: Age ${profile.age}, Weight ${profile.weight}kg, Height ${profile.height}cm. Activity level: ${profile.activityLevel}. Goal: ${profile.primaryGoal.replace('_', ' ')}. Diet type: ${profile.dietType}. Remember this when giving advice! Keep answers under 3 paragraphs.`;
+      
+      // Safety overrides
+      if (profile.hasFoodAllergies === 'yes') {
+        const allergens = profile.allergies.map(a => a.allergen).join(', ');
+        systemInstruction += `\nCRITICAL SAFETY RULE: The user has declared food allergies to: ${allergens}. You MUST NEVER recommend these foods.`;
+      }
+      if (profile.hasInjuries === 'current' || profile.hasInjuries === 'past') {
+        const injuries = profile.injuries.map(i => i.bodyPart).join(', ');
+        systemInstruction += `\nCRITICAL SAFETY RULE: The user has declared an injury to: ${injuries}. You MUST NEVER recommend exercises that aggravate these injuries. Refuse to recommend if unsure.`;
+      }
     }
 
     const response = await ai.models.generateContent({
