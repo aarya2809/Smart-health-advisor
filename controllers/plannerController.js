@@ -41,26 +41,46 @@ const generateDietPlan = async (req, res) => {
     let targetCarbs = (targetCalories - (targetProtein * 4) - (targetFats * 9)) / 4;
 
     let meals = [];
-    if (profile.dietType === 'vegan') {
+    
+    // AI Generation
+    if (process.env.GEMINI_API_KEY) {
+      const { GoogleGenAI } = require('@google/genai');
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      
+      const prompt = `You are an expert nutritionist. Create a daily meal plan for a person with the following profile:
+Diet Type: ${profile.dietType}
+Goal: ${profile.primaryGoal.replace('_', ' ')}
+Target Calories: ${Math.round(targetCalories)}
+Target Macros: Protein ${Math.round(targetProtein)}g, Carbs ${Math.round(targetCarbs)}g, Fats ${Math.round(targetFats)}g.
+
+Respond ONLY with a raw JSON array (no markdown code blocks, no backticks) where each object represents a meal and exactly matches this schema:
+[
+  { "type": "Breakfast", "foodName": "String", "portion": "String", "estimatedCalories": Number, "estimatedProtein": Number },
+  { "type": "Lunch", "foodName": "String", "portion": "String", "estimatedCalories": Number, "estimatedProtein": Number },
+  { "type": "Dinner", "foodName": "String", "portion": "String", "estimatedCalories": Number, "estimatedProtein": Number },
+  { "type": "Snack", "foodName": "String", "portion": "String", "estimatedCalories": Number, "estimatedProtein": Number }
+]`;
+
+      try {
+        const response = await ai.models.generateContent({
+          model: 'gemini-2.5-flash',
+          contents: prompt,
+        });
+        
+        let cleanedJson = response.text.replace(/```json/g, '').replace(/```/g, '').trim();
+        meals = JSON.parse(cleanedJson);
+      } catch (err) {
+        console.error("AI Diet Generation failed, falling back to default.", err);
+      }
+    }
+
+    // Fallback if AI fails or no key
+    if (meals.length === 0) {
       meals = [
-        { type: 'Breakfast', foodName: 'Oatmeal with Almond Milk and Berries', portion: '1 Bowl', estimatedCalories: 350, estimatedProtein: 10 },
-        { type: 'Lunch', foodName: 'Lentil and Quinoa Salad', portion: '1 Plate', estimatedCalories: 500, estimatedProtein: 20 },
-        { type: 'Dinner', foodName: 'Tofu Stir-fry with Broccoli', portion: '1 Bowl', estimatedCalories: 450, estimatedProtein: 25 },
-        { type: 'Snack', foodName: 'Handful of Mixed Nuts', portion: '30g', estimatedCalories: 200, estimatedProtein: 6 }
-      ];
-    } else if (profile.dietType === 'vegetarian') {
-      meals = [
-        { type: 'Breakfast', foodName: 'Greek Yogurt with Honey', portion: '1 Cup', estimatedCalories: 250, estimatedProtein: 15 },
-        { type: 'Lunch', foodName: 'Paneer Tikka Wrap', portion: '1 Wrap', estimatedCalories: 550, estimatedProtein: 22 },
-        { type: 'Dinner', foodName: 'Dal Tadka with Brown Rice', portion: '1 Bowl', estimatedCalories: 480, estimatedProtein: 18 },
-        { type: 'Snack', foodName: 'Protein Shake (Whey)', portion: '1 Scoop', estimatedCalories: 120, estimatedProtein: 25 }
-      ];
-    } else {
-      meals = [
-        { type: 'Breakfast', foodName: 'Scrambled Eggs with Whole Wheat Toast', portion: '3 Eggs, 2 Slices', estimatedCalories: 400, estimatedProtein: 24 },
-        { type: 'Lunch', foodName: 'Grilled Chicken Breast with Sweet Potato', portion: '150g Chicken, 1 Potato', estimatedCalories: 500, estimatedProtein: 40 },
-        { type: 'Dinner', foodName: 'Baked Salmon with Asparagus', portion: '1 Fillet', estimatedCalories: 450, estimatedProtein: 35 },
-        { type: 'Snack', foodName: 'Protein Shake (Whey)', portion: '1 Scoop', estimatedCalories: 120, estimatedProtein: 25 }
+        { type: 'Breakfast', foodName: 'Oatmeal & Eggs', portion: '1 Bowl', estimatedCalories: 400, estimatedProtein: 20 },
+        { type: 'Lunch', foodName: 'Chicken & Rice', portion: '1 Plate', estimatedCalories: 600, estimatedProtein: 40 },
+        { type: 'Dinner', foodName: 'Steak & Veggies', portion: '1 Plate', estimatedCalories: 500, estimatedProtein: 35 },
+        { type: 'Snack', foodName: 'Protein Shake', portion: '1 Scoop', estimatedCalories: 150, estimatedProtein: 25 }
       ];
     }
 
@@ -100,38 +120,48 @@ const generateWorkoutPlan = async (req, res) => {
 
     const hasGym = profile.accessToGym;
 
-    if (profile.primaryGoal === 'build_muscle') {
-      objective = 'Hypertrophy - Upper Body';
-      exercises = hasGym ? [
-        { name: 'Barbell Bench Press', sets: 4, reps: '8-10', restSeconds: 90 },
-        { name: 'Lat Pulldown', sets: 3, reps: '10-12', restSeconds: 60 },
-        { name: 'Dumbbell Shoulder Press', sets: 3, reps: '10-12', restSeconds: 60 },
-        { name: 'Tricep Rope Pushdown', sets: 3, reps: '12-15', restSeconds: 45 }
-      ] : [
-        { name: 'Push-ups', sets: 4, reps: 'To Failure', restSeconds: 60 },
-        { name: 'Pull-ups', sets: 3, reps: '8-10', restSeconds: 90 },
-        { name: 'Pike Push-ups', sets: 3, reps: '10-12', restSeconds: 60 },
-        { name: 'Chair Dips', sets: 3, reps: '12-15', restSeconds: 45 }
-      ];
-      estimatedDuration = 55;
-    } else if (profile.primaryGoal === 'lose_fat') {
-      objective = 'HIIT & Core Burn';
-      exercises = [
-        { name: 'Jumping Jacks', sets: 4, reps: '45 sec', restSeconds: 15 },
-        { name: 'Burpees', sets: 4, reps: '45 sec', restSeconds: 15 },
-        { name: 'Mountain Climbers', sets: 4, reps: '45 sec', restSeconds: 15 },
-        { name: 'Plank', sets: 3, reps: '60 sec', restSeconds: 30 }
-      ];
-      estimatedDuration = 30;
-    } else {
+    if (process.env.GEMINI_API_KEY) {
+      const { GoogleGenAI } = require('@google/genai');
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      
+      const prompt = `You are an expert personal trainer. Create a single daily workout for a person with this profile:
+Goal: ${profile.primaryGoal.replace('_', ' ')}
+Access to Gym: ${hasGym ? 'Yes (Full equipment)' : 'No (Bodyweight only)'}
+Fitness Level: Beginner to Intermediate
+
+Respond ONLY with a raw JSON object (no markdown, no backticks) exactly matching this schema:
+{
+  "objective": "String (e.g., Upper Body Hypertrophy, HIIT Cardio)",
+  "estimatedDuration": Number (in minutes, e.g. 45),
+  "exercises": [
+    { "name": "String", "sets": Number, "reps": "String (e.g., '10-12' or '60 sec')", "restSeconds": Number }
+  ]
+}`;
+
+      try {
+        const response = await ai.models.generateContent({
+          model: 'gemini-2.5-flash',
+          contents: prompt,
+        });
+        
+        let cleanedJson = response.text.replace(/```json/g, '').replace(/```/g, '').trim();
+        const aiPlan = JSON.parse(cleanedJson);
+        objective = aiPlan.objective || objective;
+        estimatedDuration = aiPlan.estimatedDuration || estimatedDuration;
+        exercises = aiPlan.exercises || [];
+      } catch (err) {
+        console.error("AI Workout Generation failed, falling back.", err);
+      }
+    }
+
+    if (exercises.length === 0) {
       objective = 'Functional Strength';
       exercises = [
-        { name: 'Bodyweight Squats', sets: 3, reps: '15-20', restSeconds: 60 },
-        { name: 'Push-ups', sets: 3, reps: '10-15', restSeconds: 60 },
-        { name: 'Walking Lunges', sets: 3, reps: '12 per leg', restSeconds: 60 },
+        { name: 'Bodyweight Squats', sets: 3, reps: '15', restSeconds: 60 },
+        { name: 'Push-ups', sets: 3, reps: '10', restSeconds: 60 },
         { name: 'Plank', sets: 3, reps: '45 sec', restSeconds: 30 }
       ];
-      estimatedDuration = 40;
+      estimatedDuration = 30;
     }
 
     const newPlan = await WorkoutPlan.create({
