@@ -6,6 +6,8 @@ const authRoutes = require("./routes/authRoutes");
 const profileRoutes = require("./routes/profileRoutes");
 const plannerRoutes = require("./routes/plannerRoutes");
 const aiRoutes = require("./routes/aiRoutes");
+const dashboardRoutes = require("./routes/dashboardRoutes");
+const trackingRoutes = require("./routes/trackingRoutes");
 
 dotenv.config();
 
@@ -21,6 +23,8 @@ app.use("/api/auth", authRoutes);
 app.use("/api/profile", profileRoutes);
 app.use("/api/plan", plannerRoutes);
 app.use("/api/ai", aiRoutes);
+app.use("/api/dashboard", dashboardRoutes);
+app.use("/api/tracking", trackingRoutes);
 
 // Test route
 app.get("/", (req, res) => {
