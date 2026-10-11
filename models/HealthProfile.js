@@ -7,7 +7,7 @@ const healthProfileSchema = new mongoose.Schema({
     required: true,
     unique: true
   },
-  // A. Basic profile (Some may overlap with User, but we keep detailed here)
+  // A. Basic profile
   age: Number,
   gender: String,
   height: Number,
@@ -23,26 +23,44 @@ const healthProfileSchema = new mongoose.Schema({
   // B. Fitness goals
   primaryGoal: {
     type: String,
-    enum: ['build_muscle', 'gain_weight', 'lose_fat', 'improve_endurance', 'improve_strength', 'improve_flexibility', 'general_fitness', 'maintain_weight', 'improve_consistency']
+    enum: ['build_muscle', 'gain_weight', 'lose_fat', 'improve_endurance', 'improve_strength', 'improve_flexibility', 'general_fitness', 'maintain_weight', 'improve_consistency'],
+    default: 'general_fitness'
   },
   secondaryGoals: [String],
   targetWeight: Number,
   preferredTimeframeWeeks: Number,
 
-  // C. Lifestyle
+  // C. Lifestyle & Schedule
   activityLevel: {
     type: String,
-    enum: ['sedentary', 'lightly_active', 'moderately_active', 'very_active', 'extra_active']
+    enum: ['sedentary', 'lightly_active', 'moderately_active', 'very_active', 'extra_active'],
+    default: 'moderately_active'
   },
-  averageSleepDuration: Number,
-  trainingDaysPerWeek: Number,
-  preferredWorkoutTime: String,
-  workoutDurationMinutes: Number,
-  accessToGym: Boolean,
+  averageSleepDuration: {
+    type: Number,
+    default: 8
+  },
+  trainingDaysPerWeek: {
+    type: Number,
+    default: 4
+  },
+  preferredWorkoutTime: {
+    type: String,
+    default: 'morning'
+  },
+  workoutDurationMinutes: {
+    type: Number,
+    default: 45
+  },
+  accessToGym: {
+    type: Boolean,
+    default: false
+  },
   availableEquipment: [String],
   exerciseExperience: {
     type: String,
-    enum: ['beginner', 'intermediate', 'advanced']
+    enum: ['beginner', 'intermediate', 'advanced'],
+    default: 'beginner'
   },
   preferredTrainingStyles: [String],
 
@@ -58,7 +76,7 @@ const healthProfileSchema = new mongoose.Schema({
   },
   allergies: [{
     allergen: String,
-    type: { type: String, enum: ['allergy', 'intolerance'] },
+    type: { type: String, enum: ['allergy', 'intolerance'], default: 'allergy' },
     severity: String,
     foodsToAvoid: [String],
     clinicianAdvice: String
@@ -70,7 +88,7 @@ const healthProfileSchema = new mongoose.Schema({
   },
   injuries: [{
     bodyPart: String,
-    status: { type: String, enum: ['current', 'historical'] },
+    status: { type: String, enum: ['current', 'historical'], default: 'current' },
     aggravatingMovements: [String],
     movementsToAvoid: [String],
     clinicianAdvice: String,
@@ -79,14 +97,18 @@ const healthProfileSchema = new mongoose.Schema({
   medicalConditions: [String],
   dietaryRestrictions: [String],
 
-  // E. Diet preferences
+  // E. Diet preferences (Vegetarian by default for all new profiles)
   dietType: {
     type: String,
-    enum: ['omnivorous', 'vegetarian', 'vegan', 'eggetarian', 'pescatarian']
+    enum: ['vegetarian', 'vegan', 'eggetarian', 'pescatarian', 'non_vegetarian', 'omnivorous'],
+    default: 'vegetarian'
   },
   preferredCuisines: [String],
   foodsDisliked: [String],
-  mealFrequency: Number,
+  mealFrequency: {
+    type: Number,
+    default: 3
+  },
   cookingAbility: String,
   budgetPreference: String,
 

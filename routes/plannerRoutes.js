@@ -4,7 +4,8 @@ const {
   generateDietPlan, 
   generateWorkoutPlan, 
   updateDietMealStatus, 
-  updateWorkoutStatus 
+  updateWorkoutStatus,
+  updatePlanDetails
 } = require('../controllers/plannerController');
 const protect = require('../middleware/authMiddleware');
 
@@ -12,5 +13,6 @@ router.post('/diet', protect, generateDietPlan);
 router.post('/workout', protect, generateWorkoutPlan);
 router.put('/diet/meal', protect, updateDietMealStatus);
 router.put('/workout/status', protect, updateWorkoutStatus);
+router.put('/update', protect, updatePlanDetails);
 
 module.exports = router;

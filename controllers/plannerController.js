@@ -1,27 +1,44 @@
-// ... existing imports ...
 const HealthProfile = require('../models/HealthProfile');
 const DietPlan = require('../models/DietPlan');
 const WorkoutPlan = require('../models/WorkoutPlan');
 const { validateDietPlan, validateWorkoutPlan } = require('../utils/safetyValidator');
+const { getSafeExercisesForProfile } = require('../utils/exerciseDatabase');
+const { searchFoods } = require('../utils/nutritionDatabase');
 
 // Helper to calculate Basal Metabolic Rate (BMR) using Mifflin-St Jeor Equation
 const calculateBMR = (weight, height, age, gender) => {
   let bmr = (10 * weight) + (6.25 * height) - (5 * age);
-  return gender === 'male' ? bmr + 5 : bmr - 161;
+  return gender === 'female' ? bmr - 161 : bmr + 5;
 };
 
-// Generate Diet Plan
+// Generate or Retrieve Diet Plan
 const generateDietPlan = async (req, res) => {
   try {
     const { date } = req.body;
-    const queryDate = new Date(date);
-    queryDate.setHours(0, 0, 0, 0);
+    let queryDate;
+    if (date) {
+      if (typeof date === 'string' && date.includes('T')) {
+        queryDate = new Date(date);
+      } else {
+        queryDate = new Date(`${date}T00:00:00.000Z`);
+      }
+    } else {
+      queryDate = new Date();
+    }
+    queryDate.setUTCHours(0, 0, 0, 0);
 
-    let existingPlan = await DietPlan.findOne({ user: req.user._id, date: queryDate });
+    const nextDay = new Date(queryDate);
+    nextDay.setUTCDate(nextDay.getUTCDate() + 1);
+
+    // Check if an existing plan exists for this date range
+    let existingPlan = await DietPlan.findOne({
+      user: req.user._id,
+      date: { $gte: queryDate, $lt: nextDay }
+    });
     if (existingPlan) return res.status(200).json({ success: true, plan: existingPlan });
 
     const profile = await HealthProfile.findOne({ user: req.user._id });
-    if (!profile) return res.status(400).json({ success: false, message: 'Health profile missing.' });
+    if (!profile) return res.status(400).json({ success: false, message: 'Health profile missing. Please complete onboarding first.' });
 
     let bmr = calculateBMR(profile.weight || 70, profile.height || 170, profile.age || 25, profile.gender || 'male');
     
@@ -41,6 +58,7 @@ const generateDietPlan = async (req, res) => {
     let targetFats = (targetCalories * 0.25) / 9;
     let targetCarbs = (targetCalories - (targetProtein * 4) - (targetFats * 9)) / 4;
 
+    const userDietType = profile.dietType || 'vegetarian';
     let meals = [];
     
     // AI Generation
@@ -48,11 +66,12 @@ const generateDietPlan = async (req, res) => {
       const { GoogleGenAI } = require('@google/genai');
       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
       
-      const prompt = `You are an expert nutritionist. Create a daily meal plan for a person with the following profile:
-Diet Type: ${profile.dietType}
-Goal: ${profile.primaryGoal.replace('_', ' ')}
+      const prompt = `You are an expert clinical nutritionist. Create a daily meal plan for a person with the following profile:
+Diet Type: ${userDietType}
+Goal: ${(profile.primaryGoal || 'general_fitness').replace(/_/g, ' ')}
 Target Calories: ${Math.round(targetCalories)}
 Target Macros: Protein ${Math.round(targetProtein)}g, Carbs ${Math.round(targetCarbs)}g, Fats ${Math.round(targetFats)}g.
+Allergies/Avoid: ${(profile.allergies || []).map(a => a.allergen).join(', ') || 'None'}
 
 Respond ONLY with a raw JSON array (no markdown code blocks, no backticks) where each object represents a meal and exactly matches this schema:
 [
@@ -71,18 +90,42 @@ Respond ONLY with a raw JSON array (no markdown code blocks, no backticks) where
         let cleanedJson = response.text.replace(/```json/g, '').replace(/```/g, '').trim();
         meals = JSON.parse(cleanedJson);
       } catch (err) {
-        console.error("AI Diet Generation failed, falling back to default.", err);
+        console.error("AI Diet Generation failed, falling back to nutritious default.", err);
       }
     }
 
-    // Fallback if AI fails or no key
+    // High quality deterministic fallback adhering to dietary preference (Default Vegetarian)
     if (meals.length === 0) {
-      meals = [
-        { type: 'Breakfast', foodName: 'Oatmeal & Eggs', portion: '1 Bowl', estimatedCalories: 400, estimatedProtein: 20 },
-        { type: 'Lunch', foodName: 'Chicken & Rice', portion: '1 Plate', estimatedCalories: 600, estimatedProtein: 40 },
-        { type: 'Dinner', foodName: 'Steak & Veggies', portion: '1 Plate', estimatedCalories: 500, estimatedProtein: 35 },
-        { type: 'Snack', foodName: 'Protein Shake', portion: '1 Scoop', estimatedCalories: 150, estimatedProtein: 25 }
-      ];
+      if (userDietType === 'vegan') {
+        meals = [
+          { type: 'Breakfast', foodName: 'Oatmeal with Almond Milk & Banana', portion: '1 Bowl (250g)', estimatedCalories: 380, estimatedProtein: 14 },
+          { type: 'Lunch', foodName: 'Chickpeas (Chole) & Brown Rice with Salad', portion: '1 Plate (350g)', estimatedCalories: 550, estimatedProtein: 22 },
+          { type: 'Dinner', foodName: 'Stir-fry Tofu with Steamed Vegetables & Quinoa', portion: '1 Bowl (300g)', estimatedCalories: 480, estimatedProtein: 26 },
+          { type: 'Snack', foodName: 'Roasted Chana & Handful of Almonds', portion: '50g', estimatedCalories: 200, estimatedProtein: 10 }
+        ];
+      } else if (userDietType === 'eggetarian') {
+        meals = [
+          { type: 'Breakfast', foodName: '3 Boiled Eggs & Whole Wheat Toast', portion: '2 Slices + 3 Eggs', estimatedCalories: 420, estimatedProtein: 26 },
+          { type: 'Lunch', foodName: 'Yellow Dal Tadka, Steamed Rice & Curd', portion: '1 Plate', estimatedCalories: 580, estimatedProtein: 24 },
+          { type: 'Dinner', foodName: 'Egg Bhurji (Scramble) with 2 Rotis & Salad', portion: '1 Plate', estimatedCalories: 490, estimatedProtein: 28 },
+          { type: 'Snack', foodName: 'Greek Yogurt with Fresh Fruit', portion: '1 Bowl (150g)', estimatedCalories: 180, estimatedProtein: 15 }
+        ];
+      } else if (userDietType === 'non_vegetarian') {
+        meals = [
+          { type: 'Breakfast', foodName: 'Scrambled Eggs, Oatmeal & Berries', portion: '1 Plate', estimatedCalories: 440, estimatedProtein: 28 },
+          { type: 'Lunch', foodName: 'Grilled Chicken Breast with Brown Rice & Broccoli', portion: '1 Plate', estimatedCalories: 620, estimatedProtein: 48 },
+          { type: 'Dinner', foodName: 'Fish Fillet with Sweet Potato & Green Salad', portion: '1 Plate', estimatedCalories: 510, estimatedProtein: 42 },
+          { type: 'Snack', foodName: 'Whey Protein Shake with Banana', portion: '1 Shake (300ml)', estimatedCalories: 210, estimatedProtein: 26 }
+        ];
+      } else {
+        // Default: Vegetarian
+        meals = [
+          { type: 'Breakfast', foodName: 'Moong Dal Chilla / Vegetable Oats with Dahi', portion: '2 Chillas + Dahi', estimatedCalories: 410, estimatedProtein: 20 },
+          { type: 'Lunch', foodName: 'Palak Paneer with 2 Whole Wheat Rotis & Salad', portion: '1 Thali', estimatedCalories: 590, estimatedProtein: 26 },
+          { type: 'Dinner', foodName: 'Yellow Moong Dal, Jeera Rice & Stir-fried Paneer', portion: '1 Plate', estimatedCalories: 520, estimatedProtein: 25 },
+          { type: 'Snack', foodName: 'Roasted Makhana & Greek Yogurt / Curd', portion: '1 Bowl', estimatedCalories: 190, estimatedProtein: 12 }
+        ];
+      }
     }
 
     const planData = {
@@ -103,30 +146,45 @@ Respond ONLY with a raw JSON array (no markdown code blocks, no backticks) where
     }
 
     const newPlan = await DietPlan.create(planData);
-
     res.status(201).json({ success: true, plan: newPlan });
   } catch (error) {
-    console.error(error);
+    console.error('generateDietPlan error:', error);
     res.status(500).json({ success: false, message: 'Server error generating diet plan' });
   }
 };
 
-// Generate Workout Plan
+// Generate or Retrieve Workout Plan
 const generateWorkoutPlan = async (req, res) => {
   try {
     const { date } = req.body;
-    const queryDate = new Date(date);
-    queryDate.setHours(0, 0, 0, 0);
+    let queryDate;
+    if (date) {
+      if (typeof date === 'string' && date.includes('T')) {
+        queryDate = new Date(date);
+      } else {
+        queryDate = new Date(`${date}T00:00:00.000Z`);
+      }
+    } else {
+      queryDate = new Date();
+    }
+    queryDate.setUTCHours(0, 0, 0, 0);
 
-    let existingPlan = await WorkoutPlan.findOne({ user: req.user._id, date: queryDate });
+    const nextDay = new Date(queryDate);
+    nextDay.setUTCDate(nextDay.getUTCDate() + 1);
+
+    // Check if an existing plan exists for this date range
+    let existingPlan = await WorkoutPlan.findOne({
+      user: req.user._id,
+      date: { $gte: queryDate, $lt: nextDay }
+    });
     if (existingPlan) return res.status(200).json({ success: true, plan: existingPlan });
 
     const profile = await HealthProfile.findOne({ user: req.user._id });
-    if (!profile) return res.status(400).json({ success: false, message: 'Health profile missing.' });
+    if (!profile) return res.status(400).json({ success: false, message: 'Health profile missing. Please complete onboarding first.' });
 
-    let objective = 'Full Body Conditioning';
+    let objective = 'Functional Strength & Conditioning';
     let exercises = [];
-    let estimatedDuration = 45;
+    let estimatedDuration = profile.workoutDurationMinutes || 45;
 
     const hasGym = profile.accessToGym;
 
@@ -135,16 +193,17 @@ const generateWorkoutPlan = async (req, res) => {
       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
       
       const prompt = `You are an expert personal trainer. Create a single daily workout for a person with this profile:
-Goal: ${profile.primaryGoal.replace('_', ' ')}
-Access to Gym: ${hasGym ? 'Yes (Full equipment)' : 'No (Bodyweight only)'}
-Fitness Level: Beginner to Intermediate
+Goal: ${(profile.primaryGoal || 'general_fitness').replace(/_/g, ' ')}
+Access to Gym: ${hasGym ? 'Yes (Full gym equipment)' : 'No (Bodyweight only)'}
+Fitness Level: ${profile.exerciseExperience || 'Intermediate'}
+Injuries/Restrictions: ${(profile.injuries || []).map(i => `${i.bodyPart}: avoid ${(i.movementsToAvoid || []).join(', ')}`).join('; ') || 'None'}
 
 Respond ONLY with a raw JSON object (no markdown, no backticks) exactly matching this schema:
 {
-  "objective": "String (e.g., Upper Body Hypertrophy, HIIT Cardio)",
+  "objective": "String (e.g., Upper Body Hypertrophy, Core & Conditioning)",
   "estimatedDuration": Number (in minutes, e.g. 45),
   "exercises": [
-    { "name": "String", "sets": Number, "reps": "String (e.g., '10-12' or '60 sec')", "restSeconds": Number }
+    { "name": "String", "sets": Number, "reps": "String (e.g., '10-12' or '45 sec')", "restSeconds": Number, "instructions": "String" }
   ]
 }`;
 
@@ -160,18 +219,15 @@ Respond ONLY with a raw JSON object (no markdown, no backticks) exactly matching
         estimatedDuration = aiPlan.estimatedDuration || estimatedDuration;
         exercises = aiPlan.exercises || [];
       } catch (err) {
-        console.error("AI Workout Generation failed, falling back.", err);
+        console.error("AI Workout Generation failed, falling back to verified exercise library.", err);
       }
     }
 
+    // Deterministic fallback using injury-aware exercise library
     if (exercises.length === 0) {
-      objective = 'Functional Strength';
-      exercises = [
-        { name: 'Bodyweight Squats', sets: 3, reps: '15', restSeconds: 60 },
-        { name: 'Push-ups', sets: 3, reps: '10', restSeconds: 60 },
-        { name: 'Plank', sets: 3, reps: '45 sec', restSeconds: 30 }
-      ];
-      estimatedDuration = 30;
+      objective = hasGym ? 'Full Body Hypertrophy Circuit' : 'Functional Bodyweight Conditioning';
+      exercises = getSafeExercisesForProfile(profile, 5);
+      estimatedDuration = 40;
     }
 
     const planData = {
@@ -190,29 +246,39 @@ Respond ONLY with a raw JSON object (no markdown, no backticks) exactly matching
     }
 
     const newPlan = await WorkoutPlan.create(planData);
-
     res.status(201).json({ success: true, plan: newPlan });
   } catch (error) {
-    console.error(error);
+    console.error('generateWorkoutPlan error:', error);
     res.status(500).json({ success: false, message: 'Server error generating workout plan' });
   }
 };
 
-// MARK MEAL COMPLETED
+// MARK MEAL COMPLETED OR UPDATE MEAL
 const updateDietMealStatus = async (req, res) => {
   try {
     const { planId, mealId, completed } = req.body;
     
-    const plan = await DietPlan.findOneAndUpdate(
-      { _id: planId, user: req.user._id, 'meals._id': mealId },
-      { $set: { 'meals.$.completed': completed } },
-      { new: true }
-    );
+    // Find plan by ID or by user's active/today plan
+    let query = { user: req.user._id };
+    if (planId) {
+      query._id = planId;
+    }
+
+    let plan;
+    if (mealId) {
+      plan = await DietPlan.findOneAndUpdate(
+        { ...query, 'meals._id': mealId },
+        { $set: { 'meals.$.completed': completed } },
+        { new: true }
+      );
+    } else {
+      plan = await DietPlan.findOne(query).sort({ date: -1 });
+    }
     
-    if (!plan) return res.status(404).json({ success: false, message: 'Plan or meal not found' });
+    if (!plan) return res.status(404).json({ success: false, message: 'Diet plan not found' });
     res.status(200).json({ success: true, plan });
   } catch (error) {
-    console.error(error);
+    console.error('updateDietMealStatus error:', error);
     res.status(500).json({ success: false, message: 'Server error updating meal' });
   }
 };
@@ -220,27 +286,90 @@ const updateDietMealStatus = async (req, res) => {
 // MARK WORKOUT COMPLETED OR SKIPPED
 const updateWorkoutStatus = async (req, res) => {
   try {
-    const { planId, completed, skipped, skipReason } = req.body;
+    const { planId, completed, skipped, skipReason, completedExercises, perceivedEffort, painOrDiscomfort } = req.body;
     
-    const plan = await WorkoutPlan.findOneAndUpdate(
-      { _id: planId, user: req.user._id },
-      { $set: { completed, skipped, skipReason } },
-      { new: true }
-    );
-    
-    if (!plan) return res.status(404).json({ success: false, message: 'Workout plan not found' });
-
-    // Adaptive Engine: If skipped, we can adjust tomorrow's plan or leave a note.
-    if (skipped) {
-       // In a real app we might create a recovery plan for tomorrow.
-       // For this phase, we just record the skip.
-       console.log(`User ${req.user.name} skipped workout: ${skipReason}`);
+    // Look up either by planId or by user's most recent/today workout plan
+    let query = { user: req.user._id };
+    if (planId && planId !== 'null' && planId !== 'undefined') {
+      query._id = planId;
     }
 
-    res.status(200).json({ success: true, plan });
+    let plan = await WorkoutPlan.findOne(query).sort({ date: -1 });
+    
+    if (!plan) {
+      // Auto-create a workout plan for today if one didn't exist yet
+      const today = new Date();
+      today.setUTCHours(0, 0, 0, 0);
+      const profile = await HealthProfile.findOne({ user: req.user._id });
+      const safeExercises = getSafeExercisesForProfile(profile || {}, 4);
+      
+      plan = await WorkoutPlan.create({
+        user: req.user._id,
+        date: today,
+        objective: 'Daily Training Session',
+        estimatedDuration: 45,
+        exercises: safeExercises,
+        completed: Boolean(completed),
+        skipped: Boolean(skipped),
+        skipReason: skipReason || ''
+      });
+    } else {
+      if (completed !== undefined) plan.completed = completed;
+      if (skipped !== undefined) plan.skipped = skipped;
+      if (skipReason !== undefined) plan.skipReason = skipReason;
+      
+      // Update individual exercises completion if passed
+      if (completedExercises && Array.isArray(completedExercises)) {
+        plan.exercises = plan.exercises.map(ex => {
+          const isDone = completedExercises.some(ce => (typeof ce === 'string' ? ce === ex.name : ce.name === ex.name));
+          return { ...ex.toObject ? ex.toObject() : ex, completed: isDone };
+        });
+      }
+      await plan.save();
+    }
+
+    res.status(200).json({ success: true, plan, message: 'Workout status saved successfully' });
   } catch (error) {
-    console.error(error);
+    console.error('updateWorkoutStatus error:', error);
     res.status(500).json({ success: false, message: 'Server error updating workout' });
+  }
+};
+
+// General Plan Update Endpoint (Accepts edits, substitutions, rescheduling)
+const updatePlanDetails = async (req, res) => {
+  try {
+    const { planType, planId, action, payload } = req.body;
+    // planType: 'workout' or 'diet'
+    if (planType === 'workout') {
+      const plan = await WorkoutPlan.findOne({ _id: planId, user: req.user._id });
+      if (!plan) return res.status(404).json({ success: false, message: 'Workout plan not found' });
+
+      if (action === 'reschedule' && payload.date) {
+        plan.date = new Date(payload.date);
+      } else if (action === 'replace_exercise' && payload.oldName && payload.newExercise) {
+        plan.exercises = plan.exercises.map(ex => ex.name === payload.oldName ? payload.newExercise : ex);
+      }
+      await plan.save();
+      return res.status(200).json({ success: true, plan, message: 'Workout plan updated successfully' });
+    } else {
+      const plan = await DietPlan.findOne({ _id: planId, user: req.user._id });
+      if (!plan) return res.status(404).json({ success: false, message: 'Diet plan not found' });
+
+      if (action === 'replace_food' && payload.mealId && payload.newFood) {
+        const meal = plan.meals.id(payload.mealId);
+        if (meal) {
+          meal.foodName = payload.newFood.foodName;
+          meal.portion = payload.newFood.portion || meal.portion;
+          meal.estimatedCalories = payload.newFood.estimatedCalories || meal.estimatedCalories;
+          meal.estimatedProtein = payload.newFood.estimatedProtein || meal.estimatedProtein;
+        }
+      }
+      await plan.save();
+      return res.status(200).json({ success: true, plan, message: 'Diet plan updated successfully' });
+    }
+  } catch (error) {
+    console.error('updatePlanDetails error:', error);
+    res.status(500).json({ success: false, message: 'Server error updating plan details' });
   }
 };
 
@@ -248,5 +377,6 @@ module.exports = {
   generateDietPlan,
   generateWorkoutPlan,
   updateDietMealStatus,
-  updateWorkoutStatus
+  updateWorkoutStatus,
+  updatePlanDetails
 };

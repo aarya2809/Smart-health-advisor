@@ -18,10 +18,10 @@ const getDashboardData = async (req, res) => {
     const user = await User.findById(userId).select('-password');
     const profile = await HealthProfile.findOne({ user: userId });
 
-    // 2. Fetch Active Plans
+    // 2. Fetch Active/Latest Plans for the user
     const [dietPlan, workoutPlan] = await Promise.all([
-      DietPlan.findOne({ user: userId, isActive: true }).sort({ createdAt: -1 }),
-      WorkoutPlan.findOne({ user: userId, isActive: true }).sort({ createdAt: -1 })
+      DietPlan.findOne({ user: userId }).sort({ date: -1, createdAt: -1 }),
+      WorkoutPlan.findOne({ user: userId }).sort({ date: -1, createdAt: -1 })
     ]);
 
     // 3. Fetch Today's Tracking Log
@@ -34,8 +34,10 @@ const getDashboardData = async (req, res) => {
         waterTargetMl: 2500,
         meals: [],
         workoutCompleted: false,
+        workoutSkipped: false,
         workoutDurationMinutes: 0,
-        completedExercises: []
+        completedExercises: [],
+        sleepHours: 0
       };
     }
 
@@ -89,8 +91,8 @@ const getDashboardData = async (req, res) => {
       },
       profile,
       metrics,
-      activeDietPlan: dietPlan ? dietPlan.plan : null,
-      activeWorkoutPlan: workoutPlan ? workoutPlan.plan : null,
+      activeDietPlan: dietPlan,
+      activeWorkoutPlan: workoutPlan,
       todayLog: {
         ...trackingLog.toObject ? trackingLog.toObject() : trackingLog,
         consumedNutrition

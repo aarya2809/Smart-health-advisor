@@ -1,5 +1,6 @@
 const TrackingLog = require('../models/TrackingLog');
 const HealthProfile = require('../models/HealthProfile');
+const { searchFoods, calculateNutrition } = require('../utils/nutritionDatabase');
 
 // Helper to get local date string YYYY-MM-DD
 const getTodayDateString = () => {
@@ -20,7 +21,9 @@ const getTodayLog = async (req, res) => {
         waterTargetMl: 2500,
         meals: [],
         workoutCompleted: false,
-        completedExercises: []
+        workoutSkipped: false,
+        completedExercises: [],
+        sleepHours: 0
       });
     }
 
@@ -31,11 +34,39 @@ const getTodayLog = async (req, res) => {
   }
 };
 
+// Automatic Nutrition Food Search
+const searchFoodItems = async (req, res) => {
+  try {
+    const { query } = req.query;
+    const profile = await HealthProfile.findOne({ user: req.user._id });
+    const userDiet = profile?.dietType || 'vegetarian';
+    const userAllergies = profile?.allergies || [];
+
+    const results = searchFoods(query, userDiet, userAllergies);
+    res.status(200).json({ success: true, results });
+  } catch (error) {
+    console.error('searchFoodItems error:', error);
+    res.status(500).json({ success: false, message: 'Server error searching foods' });
+  }
+};
+
+// Automatic Nutrition Calculator
+const computeFoodNutrition = async (req, res) => {
+  try {
+    const { foodId, quantity, customGrams } = req.body;
+    const nutrition = calculateNutrition(foodId, quantity, customGrams);
+    res.status(200).json({ success: true, nutrition });
+  } catch (error) {
+    console.error('computeFoodNutrition error:', error);
+    res.status(500).json({ success: false, message: 'Server error computing food nutrition' });
+  }
+};
+
 const logMeal = async (req, res) => {
   try {
-    const { name, mealType, calories, protein, carbs, fats, date } = req.body;
-    if (!name) {
-      return res.status(400).json({ success: false, message: 'Meal name is required' });
+    const { foodId, name, mealType, quantity, customGrams, calories, protein, carbs, fats, date } = req.body;
+    if (!name && !foodId) {
+      return res.status(400).json({ success: false, message: 'Food item or name is required' });
     }
 
     const logDate = date || getTodayDateString();
@@ -49,19 +80,37 @@ const logMeal = async (req, res) => {
       });
     }
 
-    log.meals.push({
-      name,
+    // If calories/protein not provided, compute automatically from database
+    let mealNutrition = {
+      name: name || 'Custom Meal',
       mealType: mealType || 'snack',
       calories: Number(calories) || 0,
       protein: Number(protein) || 0,
       carbs: Number(carbs) || 0,
       fats: Number(fats) || 0,
+      portion: `${quantity || 1} serving`,
+      isEstimated: true
+    };
+
+    if (foodId) {
+      const calc = calculateNutrition(foodId, quantity || 1, customGrams);
+      mealNutrition.name = calc.foodName;
+      mealNutrition.calories = calc.calories;
+      mealNutrition.protein = calc.protein;
+      mealNutrition.carbs = calc.carbs;
+      mealNutrition.fats = calc.fats;
+      mealNutrition.portion = calc.portion;
+      mealNutrition.isEstimated = calc.isEstimated;
+    }
+
+    log.meals.push({
+      ...mealNutrition,
       completed: true,
       loggedAt: new Date()
     });
 
     await log.save();
-    res.status(200).json({ success: true, log, message: 'Meal logged successfully' });
+    res.status(200).json({ success: true, log, message: 'Food logged with automatic nutrition calculation' });
   } catch (error) {
     console.error('logMeal error:', error);
     res.status(500).json({ success: false, message: 'Server error logging meal' });
@@ -95,7 +144,7 @@ const updateWater = async (req, res) => {
 
 const logWorkout = async (req, res) => {
   try {
-    const { completed, durationMinutes, notes, completedExercises, date } = req.body;
+    const { completed, skipped, skipReason, durationMinutes, notes, completedExercises, perceivedEffort, painOrDiscomfort, date } = req.body;
     const logDate = date || getTodayDateString();
 
     let log = await TrackingLog.findOne({ user: req.user._id, date: logDate });
@@ -106,18 +155,71 @@ const logWorkout = async (req, res) => {
       });
     }
 
-    log.workoutCompleted = completed !== undefined ? completed : true;
+    if (completed !== undefined) log.workoutCompleted = Boolean(completed);
+    if (skipped !== undefined) log.workoutSkipped = Boolean(skipped);
+    if (skipReason !== undefined) log.skipReason = skipReason;
     if (durationMinutes !== undefined) log.workoutDurationMinutes = Number(durationMinutes);
     if (notes) log.workoutNotes = notes;
+    if (perceivedEffort !== undefined) log.perceivedEffort = Number(perceivedEffort);
+    if (painOrDiscomfort !== undefined) log.painOrDiscomfort = painOrDiscomfort;
+    
     if (completedExercises && Array.isArray(completedExercises)) {
-      log.completedExercises = completedExercises;
+      log.completedExercises = completedExercises.map(ex => {
+        if (typeof ex === 'string') {
+          return { name: ex, sets: 3, reps: 10, weight: 0, completed: true };
+        }
+        return {
+          name: ex.name,
+          sets: Number(ex.sets) || 3,
+          reps: ex.reps || 10,
+          weight: Number(ex.weight) || 0,
+          perceivedEffort: ex.perceivedEffort ? Number(ex.perceivedEffort) : undefined,
+          painOrDiscomfort: ex.painOrDiscomfort || '',
+          completed: ex.completed !== undefined ? ex.completed : true
+        };
+      });
     }
 
     await log.save();
-    res.status(200).json({ success: true, log, message: 'Workout progress saved' });
+    res.status(200).json({ success: true, log, message: 'Workout progress saved successfully' });
   } catch (error) {
     console.error('logWorkout error:', error);
     res.status(500).json({ success: false, message: 'Server error logging workout' });
+  }
+};
+
+const logSleep = async (req, res) => {
+  try {
+    const { sleepHours, bedTime, wakeTime, sleepQuality, energyLevel, sleepNotes, date } = req.body;
+    const logDate = date || getTodayDateString();
+
+    let log = await TrackingLog.findOne({ user: req.user._id, date: logDate });
+    if (!log) {
+      log = new TrackingLog({ user: req.user._id, date: logDate });
+    }
+
+    // Auto calculate sleep hours from bedTime & wakeTime if crossing midnight
+    let calculatedHours = sleepHours !== undefined ? Number(sleepHours) : log.sleepHours;
+    if (bedTime && wakeTime && (!sleepHours || sleepHours === 0)) {
+      const [bH, bM] = bedTime.split(':').map(Number);
+      const [wH, wM] = wakeTime.split(':').map(Number);
+      let diffMinutes = (wH * 60 + wM) - (bH * 60 + bM);
+      if (diffMinutes < 0) diffMinutes += 24 * 60; // crossed midnight
+      calculatedHours = Math.round((diffMinutes / 60) * 10) / 10;
+    }
+
+    log.sleepHours = Math.max(0, Math.min(24, calculatedHours));
+    if (bedTime) log.bedTime = bedTime;
+    if (wakeTime) log.wakeTime = wakeTime;
+    if (sleepQuality) log.sleepQuality = Number(sleepQuality);
+    if (energyLevel) log.energyLevel = Number(energyLevel);
+    if (sleepNotes) log.sleepNotes = sleepNotes;
+
+    await log.save();
+    res.status(200).json({ success: true, log, message: 'Sleep & recovery logged successfully' });
+  } catch (error) {
+    console.error('logSleep error:', error);
+    res.status(500).json({ success: false, message: 'Server error logging sleep' });
   }
 };
 
@@ -166,9 +268,12 @@ const getHistory = async (req, res) => {
 
 module.exports = {
   getTodayLog,
+  searchFoodItems,
+  computeFoodNutrition,
   logMeal,
   updateWater,
   logWorkout,
+  logSleep,
   logWeight,
   getHistory
 };
