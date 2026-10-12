@@ -59,16 +59,32 @@ describe('Health Metrics & Energy Calculator', () => {
     });
   });
 
-  describe('Calorie & Macro Targets', () => {
-    test('applies deficit for lose_fat', () => {
-      const targets = calculateTargets(2500, 80, 'lose_fat');
-      expect(targets.calorieTarget).toBe(2000); // 2500 - 500
-      expect(targets.proteinTargetGrams).toBe(160); // 80 * 2.0g
+  describe('Calorie & Macro Targets (ACSM/ISSN Engine)', () => {
+    test('applies deficit and 1.5 g/kg protein for lose_fat', () => {
+      // 80 kg, 175 cm (BMI = 26.1 < 30) => uses actual weight 80 kg * 1.5 = 120 g
+      const targets = calculateTargets(2500, 80, 'lose_fat', 175);
+      expect(targets.calorieTarget).toBe(2050); // 2500 - 450
+      expect(targets.proteinTargetGrams).toBe(120); // 80 * 1.5g
+      expect(targets.calculationMethod).toContain('ACSM/ISSN');
+      expect(targets.rationale).toBeDefined();
     });
 
-    test('applies surplus for build_muscle', () => {
-      const targets = calculateTargets(2500, 75, 'build_muscle');
+    test('applies surplus and 1.8 g/kg protein for build_muscle', () => {
+      // 75 kg * 1.8 = 135 g
+      const targets = calculateTargets(2500, 75, 'build_muscle', 175);
       expect(targets.calorieTarget).toBe(2800); // 2500 + 300
+      expect(targets.proteinTargetGrams).toBe(135); // 75 * 1.8g
+    });
+
+    test('applies adjusted reference weight for BMI >= 30 (obesity)', () => {
+      // 120 kg, 170 cm (BMI = 41.5 >= 30)
+      // Male 170 cm: Hamwi IBW = 48.0 + ((170 - 152.4)/2.54) * 2.7 = 48.0 + 6.93 * 2.7 = 66.7 kg
+      // AdjBW = 66.7 + 0.25 * (120 - 66.7) = 66.7 + 13.3 = 80.0 kg
+      // Target at 1.5 g/kg = 120 g instead of unadjusted 180 g
+      const targets = calculateTargets(2500, 120, 'lose_fat', 170, 30, 'male');
+      expect(targets.referenceWeightKg).toBeLessThan(120);
+      expect(targets.proteinTargetGrams).toBeLessThan(180);
+      expect(targets.rationale).toContain('adjusted reference weight');
     });
   });
 });

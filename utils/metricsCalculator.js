@@ -77,47 +77,27 @@ function calculateTDEE(bmr, activityLevel) {
   };
 }
 
-function calculateTargets(tdee, weightKg, goal) {
+const { calculateIndividualizedTargets } = require('./proteinCalculator');
+
+function calculateTargets(tdee, weightKg, goal, heightCm = 170, age = 25, gender = 'male', activityLevel = 'moderately_active', dietType = 'vegetarian') {
   if (!tdee || tdee <= 0) return null;
 
-  let calorieTarget = tdee;
-  if (goal === 'lose_fat') {
-    calorieTarget = Math.max(1200, tdee - 500);
-  } else if (goal === 'build_muscle') {
-    calorieTarget = tdee + 300;
-  } else if (goal === 'gain_weight') {
-    calorieTarget = tdee + 500;
-  }
-
-  // Macronutrients
-  const weight = weightKg || 70;
-  let proteinPerKg = 1.8;
-  if (goal === 'build_muscle' || goal === 'lose_fat') {
-    proteinPerKg = 2.0;
-  }
-
-  const proteinGrams = Math.round(weight * proteinPerKg);
-  const proteinCals = proteinGrams * 4;
-
-  // Fat: 25% of calories
-  const fatCals = calorieTarget * 0.25;
-  const fatGrams = Math.round(fatCals / 9);
-
-  // Remaining calories to carbs
-  const carbCals = Math.max(0, calorieTarget - proteinCals - fatCals);
-  const carbGrams = Math.round(carbCals / 4);
-
-  return {
-    calorieTarget,
-    proteinTargetGrams: proteinGrams,
-    carbTargetGrams: carbGrams,
-    fatTargetGrams: fatGrams
-  };
+  return calculateIndividualizedTargets({
+    tdee,
+    weightKg,
+    heightCm,
+    age,
+    gender,
+    goal,
+    activityLevel,
+    dietType
+  });
 }
 
 module.exports = {
   calculateBMI,
   calculateBMR,
   calculateTDEE,
-  calculateTargets
+  calculateTargets,
+  calculateIndividualizedTargets
 };

@@ -64,7 +64,16 @@ const getDashboardData = async (req, res) => {
       if (metrics.bmr) {
         metrics.tdee = calculateTDEE(metrics.bmr.value, profile.activityLevel || 'moderately_active');
         if (metrics.tdee) {
-          metrics.targets = calculateTargets(metrics.tdee.value, profile.weight, profile.primaryGoal);
+          metrics.targets = calculateTargets(
+            metrics.tdee.value,
+            profile.weight,
+            profile.primaryGoal,
+            profile.height,
+            profile.age,
+            profile.gender,
+            profile.activityLevel,
+            profile.dietType
+          );
         }
       }
     }

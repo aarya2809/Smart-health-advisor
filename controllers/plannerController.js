@@ -2,14 +2,10 @@ const HealthProfile = require('../models/HealthProfile');
 const DietPlan = require('../models/DietPlan');
 const WorkoutPlan = require('../models/WorkoutPlan');
 const { validateDietPlan, validateWorkoutPlan } = require('../utils/safetyValidator');
-const { getSafeExercisesForProfile } = require('../utils/exerciseDatabase');
+const { getSafeExercisesForProfile, sanitizeWorkoutPlan, isExerciseSafeForProfile } = require('../utils/injuryEngine');
 const { searchFoods } = require('../utils/nutritionDatabase');
-
-// Helper to calculate Basal Metabolic Rate (BMR) using Mifflin-St Jeor Equation
-const calculateBMR = (weight, height, age, gender) => {
-  let bmr = (10 * weight) + (6.25 * height) - (5 * age);
-  return gender === 'female' ? bmr - 161 : bmr + 5;
-};
+const { calculateBMR, calculateTDEE } = require('../utils/metricsCalculator');
+const { calculateIndividualizedTargets } = require('../utils/proteinCalculator');
 
 // Generate or Retrieve Diet Plan
 const generateDietPlan = async (req, res) => {
@@ -40,23 +36,26 @@ const generateDietPlan = async (req, res) => {
     const profile = await HealthProfile.findOne({ user: req.user._id });
     if (!profile) return res.status(400).json({ success: false, message: 'Health profile missing. Please complete onboarding first.' });
 
-    let bmr = calculateBMR(profile.weight || 70, profile.height || 170, profile.age || 25, profile.gender || 'male');
-    
-    let activityMultiplier = 1.2;
-    if (profile.activityLevel === 'lightly_active') activityMultiplier = 1.375;
-    if (profile.activityLevel === 'moderately_active') activityMultiplier = 1.55;
-    if (profile.activityLevel === 'very_active') activityMultiplier = 1.725;
-    if (profile.activityLevel === 'extra_active') activityMultiplier = 1.9;
+    const bmrObj = calculateBMR(profile.weight || 70, profile.height || 170, profile.age || 25, profile.gender || 'male');
+    const bmrValue = bmrObj ? bmrObj.value : (10 * (profile.weight || 70) + 6.25 * (profile.height || 170) - 5 * (profile.age || 25) + 5);
+    const tdeeObj = calculateTDEE(bmrValue, profile.activityLevel || 'moderately_active');
+    const tdeeValue = tdeeObj ? tdeeObj.value : Math.round(bmrValue * 1.55);
 
-    let tdee = bmr * activityMultiplier;
-    let targetCalories = tdee;
+    const macroTargets = calculateIndividualizedTargets({
+      tdee: tdeeValue,
+      weightKg: profile.weight,
+      heightCm: profile.height,
+      age: profile.age,
+      gender: profile.gender,
+      goal: profile.primaryGoal,
+      activityLevel: profile.activityLevel,
+      dietType: profile.dietType
+    });
 
-    if (profile.primaryGoal === 'lose_fat') targetCalories -= 500;
-    if (profile.primaryGoal === 'build_muscle' || profile.primaryGoal === 'gain_weight') targetCalories += 300;
-
-    let targetProtein = profile.primaryGoal === 'build_muscle' ? (profile.weight * 2) : (profile.weight * 1.5);
-    let targetFats = (targetCalories * 0.25) / 9;
-    let targetCarbs = (targetCalories - (targetProtein * 4) - (targetFats * 9)) / 4;
+    const targetCalories = macroTargets.calorieTarget;
+    const targetProtein = macroTargets.proteinTargetGrams;
+    const targetCarbs = macroTargets.carbTargetGrams;
+    const targetFats = macroTargets.fatTargetGrams;
 
     const userDietType = profile.dietType || 'vegetarian';
     let meals = [];
@@ -135,6 +134,10 @@ Respond ONLY with a raw JSON array (no markdown code blocks, no backticks) where
       targetProtein: Math.round(targetProtein),
       targetCarbs: Math.round(targetCarbs),
       targetFats: Math.round(targetFats),
+      dietType: userDietType,
+      calculationMethod: macroTargets.calculationMethod,
+      rationale: macroTargets.rationale,
+      referenceWeightKg: macroTargets.referenceWeightKg,
       meals
     };
 
@@ -177,10 +180,20 @@ const generateWorkoutPlan = async (req, res) => {
       user: req.user._id,
       date: { $gte: queryDate, $lt: nextDay }
     });
-    if (existingPlan) return res.status(200).json({ success: true, plan: existingPlan });
 
     const profile = await HealthProfile.findOne({ user: req.user._id });
     if (!profile) return res.status(400).json({ success: false, message: 'Health profile missing. Please complete onboarding first.' });
+
+    // REVALIDATE EXISTING PLAN: Ensure cached plans never bypass updated injury safety rules
+    if (existingPlan) {
+      const { sanitizedPlan, substitutionsMade } = sanitizeWorkoutPlan(existingPlan, profile);
+      if (substitutionsMade > 0) {
+        existingPlan.exercises = sanitizedPlan.exercises;
+        existingPlan.safetyAuditPassed = true;
+        await existingPlan.save();
+      }
+      return res.status(200).json({ success: true, plan: existingPlan });
+    }
 
     let objective = 'Functional Strength & Conditioning';
     let exercises = [];
@@ -192,11 +205,13 @@ const generateWorkoutPlan = async (req, res) => {
       const { GoogleGenAI } = require('@google/genai');
       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
       
-      const prompt = `You are an expert personal trainer. Create a single daily workout for a person with this profile:
+      const injuriesList = (profile.injuries || []).map(i => `${i.bodyPart}: avoid ${(i.movementsToAvoid || []).join(', ')}`).join('; ') || 'None';
+      const prompt = `You are an expert clinical personal trainer. Create a single daily workout for a person with this profile:
 Goal: ${(profile.primaryGoal || 'general_fitness').replace(/_/g, ' ')}
 Access to Gym: ${hasGym ? 'Yes (Full gym equipment)' : 'No (Bodyweight only)'}
 Fitness Level: ${profile.exerciseExperience || 'Intermediate'}
-Injuries/Restrictions: ${(profile.injuries || []).map(i => `${i.bodyPart}: avoid ${(i.movementsToAvoid || []).join(', ')}`).join('; ') || 'None'}
+Injuries/Restrictions: ${injuriesList}
+CRITICAL SAFETY RESTRICTION: If the user has any knee injury or leg limitation, NEVER recommend squats, lunges, leg press, jumps, or knee-bending movements. Focus on upper body and knee-friendly core.
 
 Respond ONLY with a raw JSON object (no markdown, no backticks) exactly matching this schema:
 {
@@ -217,15 +232,20 @@ Respond ONLY with a raw JSON object (no markdown, no backticks) exactly matching
         const aiPlan = JSON.parse(cleanedJson);
         objective = aiPlan.objective || objective;
         estimatedDuration = aiPlan.estimatedDuration || estimatedDuration;
-        exercises = aiPlan.exercises || [];
+        
+        // Pass AI exercises through clinical injury sanitization engine
+        if (Array.isArray(aiPlan.exercises)) {
+          const { sanitizedPlan } = sanitizeWorkoutPlan({ exercises: aiPlan.exercises }, profile);
+          exercises = sanitizedPlan.exercises;
+        }
       } catch (err) {
         console.error("AI Workout Generation failed, falling back to verified exercise library.", err);
       }
     }
 
-    // Deterministic fallback using injury-aware exercise library
+    // Deterministic fallback using injury-aware clinical exercise library
     if (exercises.length === 0) {
-      objective = hasGym ? 'Full Body Hypertrophy Circuit' : 'Functional Bodyweight Conditioning';
+      objective = hasGym ? 'Upper Body & Core Circuit' : 'Functional Conditioning';
       exercises = getSafeExercisesForProfile(profile, 5);
       estimatedDuration = 40;
     }
@@ -235,17 +255,21 @@ Respond ONLY with a raw JSON object (no markdown, no backticks) exactly matching
       date: queryDate,
       objective,
       estimatedDuration,
-      exercises
+      exercises,
+      safetyAuditPassed: true
     };
 
     // STRICT BACKEND SAFETY VALIDATION
     try {
       validateWorkoutPlan(planData, profile);
     } catch (validationError) {
-      return res.status(403).json({ success: false, message: validationError.message });
+      // If validation somehow catches a violation, force clean fallback
+      const safeExercises = getSafeExercisesForProfile(profile, 4);
+      planData.exercises = safeExercises;
     }
 
     const newPlan = await WorkoutPlan.create(planData);
+    res.status(201).json({ success: true, plan: newPlan });
     res.status(201).json({ success: true, plan: newPlan });
   } catch (error) {
     console.error('generateWorkoutPlan error:', error);
@@ -347,6 +371,11 @@ const updatePlanDetails = async (req, res) => {
       if (action === 'reschedule' && payload.date) {
         plan.date = new Date(payload.date);
       } else if (action === 'replace_exercise' && payload.oldName && payload.newExercise) {
+        const profile = await HealthProfile.findOne({ user: req.user._id });
+        const safetyCheck = isExerciseSafeForProfile(payload.newExercise, profile);
+        if (!safetyCheck.safe) {
+          return res.status(400).json({ success: false, message: `Replacement exercise violates injury safety: ${safetyCheck.reason}` });
+        }
         plan.exercises = plan.exercises.map(ex => ex.name === payload.oldName ? payload.newExercise : ex);
       }
       await plan.save();

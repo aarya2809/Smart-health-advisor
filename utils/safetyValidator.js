@@ -35,26 +35,18 @@ const validateDietPlan = (plan, profile) => {
   return true; // Passed validation
 };
 
+const { isExerciseSafeForProfile } = require('./injuryEngine');
+
 const validateWorkoutPlan = (plan, profile) => {
   if (!profile.safetyQuestionnaireCompleted) {
     throw new Error('SAFETY_VIOLATION: User must complete safety questionnaire before generating a workout plan.');
   }
 
-  if (profile.hasInjuries === 'current' || profile.hasInjuries === 'past') {
-    if (profile.injuries.length > 0) {
-      for (const exercise of plan.exercises) {
-        const exerciseLower = exercise.name.toLowerCase();
-        
-        for (const injury of profile.injuries) {
-          if (injury.movementsToAvoid && injury.movementsToAvoid.length > 0) {
-            for (const movement of injury.movementsToAvoid) {
-              const avoidLower = movement.toLowerCase();
-              if (avoidLower && exerciseLower.includes(avoidLower)) {
-                throw new Error(`SAFETY_VIOLATION: AI attempted to recommend '${exercise.name}' which violates movement restriction: '${movement}'.`);
-              }
-            }
-          }
-        }
+  if (plan && Array.isArray(plan.exercises)) {
+    for (const exercise of plan.exercises) {
+      const safetyCheck = isExerciseSafeForProfile(exercise, profile);
+      if (!safetyCheck.safe) {
+        throw new Error(`SAFETY_VIOLATION: Recommended exercise '${exercise.name}' violates declared physical limitation: ${safetyCheck.reason}`);
       }
     }
   }

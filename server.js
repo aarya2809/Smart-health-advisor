@@ -26,11 +26,28 @@ app.use("/api/ai", aiRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/tracking", trackingRoutes);
 
-// Test route
+// Health check routes
+const healthCheckHandler = (req, res) => {
+  const isDbConnected = require("mongoose").connection.readyState === 1;
+  res.status(isDbConnected ? 200 : 503).json({
+    success: isDbConnected,
+    status: isDbConnected ? "ok" : "degraded",
+    message: "Smart Health Advisor API is running",
+    database: isDbConnected ? "connected" : "disconnected",
+    timestamp: new Date().toISOString(),
+    uptime: Math.round(process.uptime()),
+  });
+};
+
+app.get("/health", healthCheckHandler);
+app.get("/api/health", healthCheckHandler);
+
+// Test root route
 app.get("/", (req, res) => {
   res.status(200).json({
     success: true,
     message: "Smart Health Advisor API is running",
+    docs: "/api/health",
   });
 });
 

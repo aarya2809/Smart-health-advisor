@@ -14,6 +14,13 @@ const dietPlanSchema = new mongoose.Schema({
   targetProtein: Number, // in grams
   targetCarbs: Number, // in grams
   targetFats: Number, // in grams
+  dietType: {
+    type: String,
+    default: 'vegetarian'
+  },
+  calculationMethod: String,
+  rationale: String,
+  referenceWeightKg: Number,
   meals: [{
     type: {
       type: String,

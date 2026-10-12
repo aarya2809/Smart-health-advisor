@@ -1,162 +1,361 @@
-// Structured Exercise Reference Library with instructions, target muscles, equipment & movement restrictions
+/**
+ * Comprehensive Clinical Exercise Database
+ * Fully annotated with biomechanical metadata:
+ * - jointsInvolved: joints under mechanical load or articulation
+ * - movementPatterns: kinetic movement categories
+ * - contraindications: body parts, joint areas, or conditions that render this exercise unsuitable
+ * - impactLevel: 'low' | 'moderate' | 'high'
+ * - safeAlternatives: IDs of verified low-stress alternatives
+ */
+
 const EXERCISE_DATABASE = [
+  // --- CHEST & UPPER BODY PUSH (KNEE-FREE) ---
   {
     id: 'pushups',
-    name: 'Push-ups',
+    name: 'Standard Push-ups',
     targetMuscles: ['Chest', 'Triceps', 'Core'],
-    equipment: 'Bodyweight',
+    jointsInvolved: ['shoulder', 'elbow', 'wrist'],
+    movementPatterns: ['horizontal_push'],
+    equipment: 'bodyweight',
     difficulty: 'Beginner',
+    impactLevel: 'low',
     defaultSets: 3,
     defaultReps: '12-15',
     restSeconds: 60,
-    instructions: 'Keep body in a straight plank line. Lower chest to floor and push back up with elbows at 45 degrees.',
-    restrictedForInjuries: ['wrist_pain', 'shoulder_impingement']
+    instructions: 'Maintain a straight plank posture. Lower chest smoothly towards floor and push up with elbows at 45 degrees.',
+    contraindications: ['shoulder', 'wrist', 'elbow'],
+    safeAlternatives: ['dumbbell_floor_press', 'incline_wall_pushup']
   },
   {
-    id: 'bodyweight_squats',
-    name: 'Bodyweight Squats',
-    targetMuscles: ['Quadriceps', 'Glutes', 'Hamstrings'],
-    equipment: 'Bodyweight',
+    id: 'dumbbell_floor_press',
+    name: 'Dumbbell Floor Chest Press',
+    targetMuscles: ['Chest', 'Triceps'],
+    jointsInvolved: ['shoulder', 'elbow'],
+    movementPatterns: ['horizontal_push'],
+    equipment: 'dumbbells',
     difficulty: 'Beginner',
+    impactLevel: 'low',
     defaultSets: 3,
-    defaultReps: '15-20',
+    defaultReps: '10-12',
     restSeconds: 60,
-    instructions: 'Feet shoulder-width apart. Hips back and down until thighs are parallel to ground. Keep chest upright.',
-    restrictedForInjuries: ['knee_pain', 'patellar_tendonitis']
+    instructions: 'Lie on floor with knees bent, feet flat. Press dumbbells upward, stopping when upper arms touch the floor.',
+    contraindications: ['shoulder_impingement'],
+    safeAlternatives: ['chest_squeeze_push']
   },
   {
-    id: 'plank',
-    name: 'Standard Forearm Plank',
-    targetMuscles: ['Core', 'Transverse Abdominis', 'Shoulders'],
-    equipment: 'Bodyweight',
-    difficulty: 'Beginner',
-    defaultSets: 3,
-    defaultReps: '45-60 sec',
-    restSeconds: 45,
-    instructions: 'Rest on forearms and toes. Squeeze glutes and brace core tightly without sagging lower back.',
-    restrictedForInjuries: ['lower_back_pain']
-  },
-  {
-    id: 'glute_bridges',
-    name: 'Glute Bridges',
-    targetMuscles: ['Glutes', 'Hamstrings', 'Lower Back'],
-    equipment: 'Bodyweight',
-    difficulty: 'Beginner',
-    defaultSets: 3,
-    defaultReps: '15',
-    restSeconds: 45,
-    instructions: 'Lie on back with knees bent. Drive through heels to raise hips toward ceiling. Squeeze glutes at top.',
-    restrictedForInjuries: []
-  },
-  {
-    id: 'lunges',
-    name: 'Walking Lunges',
-    targetMuscles: ['Quadriceps', 'Glutes'],
-    equipment: 'Bodyweight',
+    id: 'dumbbell_bench_press',
+    name: 'Dumbbell Flat Bench Press',
+    targetMuscles: ['Chest', 'Anterior Deltoid', 'Triceps'],
+    jointsInvolved: ['shoulder', 'elbow'],
+    movementPatterns: ['horizontal_push'],
+    equipment: 'bench',
     difficulty: 'Intermediate',
+    impactLevel: 'low',
     defaultSets: 3,
-    defaultReps: '10 per leg',
-    restSeconds: 60,
-    instructions: 'Step forward and lower back knee toward ground. Keep front knee behind toe line.',
-    restrictedForInjuries: ['knee_pain']
+    defaultReps: '10-12',
+    restSeconds: 90,
+    instructions: 'Press dumbbells vertically above chest. Lower with controlled tempo, keeping shoulder blades retracted.',
+    contraindications: ['shoulder', 'rotator_cuff'],
+    safeAlternatives: ['dumbbell_floor_press']
   },
+
+  // --- BACK & UPPER BODY PULL (KNEE-FREE) ---
   {
     id: 'dumbbell_rows',
     name: 'Dumbbell Bent-Over Rows',
     targetMuscles: ['Lats', 'Rhomboids', 'Biceps'],
-    equipment: 'Dumbbells',
+    jointsInvolved: ['elbow', 'shoulder', 'spine'],
+    movementPatterns: ['horizontal_pull'],
+    equipment: 'dumbbells',
     difficulty: 'Intermediate',
+    impactLevel: 'low',
     defaultSets: 3,
     defaultReps: '10-12',
     restSeconds: 60,
-    instructions: 'Hinge at hips with flat back. Pull dumbbells to hips, squeezing shoulder blades together.',
-    restrictedForInjuries: ['lower_back_herniation']
+    instructions: 'Hinge forward at hips keeping back straight. Drive elbows back to pull weights towards hips.',
+    contraindications: ['lower_back', 'spine'],
+    safeAlternatives: ['chest_supported_row', 'seated_band_row']
   },
   {
-    id: 'dumbbell_bench_press',
-    name: 'Dumbbell Chest Press',
-    targetMuscles: ['Chest', 'Anterior Deltoid', 'Triceps'],
-    equipment: 'Dumbbells / Bench',
-    difficulty: 'Intermediate',
+    id: 'chest_supported_row',
+    name: 'Chest-Supported Incline Dumbbell Row',
+    targetMuscles: ['Upper Back', 'Lats', 'Rear Deltoids'],
+    jointsInvolved: ['elbow', 'shoulder'],
+    movementPatterns: ['horizontal_pull'],
+    equipment: 'bench',
+    difficulty: 'Beginner',
+    impactLevel: 'low',
     defaultSets: 3,
-    defaultReps: '10-12',
-    restSeconds: 90,
-    instructions: 'Press dumbbells up above chest and lower under control with elbows tucked slightly.',
-    restrictedForInjuries: ['shoulder_dislocation']
+    defaultReps: '12',
+    restSeconds: 60,
+    instructions: 'Lie chest-down on incline bench. Pull dumbbells towards ribcage without spinal shear stress.',
+    contraindications: ['shoulder'],
+    safeAlternatives: ['seated_resistance_band_row']
+  },
+  {
+    id: 'seated_resistance_band_row',
+    name: 'Seated Resistance Band Row',
+    targetMuscles: ['Lats', 'Rhomboids', 'Biceps'],
+    jointsInvolved: ['elbow', 'shoulder'],
+    movementPatterns: ['horizontal_pull'],
+    equipment: 'bodyweight',
+    difficulty: 'Beginner',
+    impactLevel: 'low',
+    defaultSets: 3,
+    defaultReps: '15',
+    restSeconds: 45,
+    instructions: 'Sit upright with legs extended. Loop band around feet and pull handles toward torso squeezing shoulder blades.',
+    contraindications: [],
+    safeAlternatives: []
+  },
+
+  // --- SHOULDERS & ARMS (KNEE-FREE) ---
+  {
+    id: 'lateral_raises',
+    name: 'Dumbbell Lateral Shoulder Raises',
+    targetMuscles: ['Lateral Deltoids'],
+    jointsInvolved: ['shoulder'],
+    movementPatterns: ['shoulder_abduction'],
+    equipment: 'dumbbells',
+    difficulty: 'Beginner',
+    impactLevel: 'low',
+    defaultSets: 3,
+    defaultReps: '12-15',
+    restSeconds: 45,
+    instructions: 'Raise dumbbells out to sides until parallel to floor with a slight forward angle.',
+    contraindications: ['shoulder_impingement'],
+    safeAlternatives: ['front_raise']
+  },
+  {
+    id: 'bicep_curls',
+    name: 'Standing Dumbbell Bicep Curls',
+    targetMuscles: ['Biceps', 'Brachialis'],
+    jointsInvolved: ['elbow'],
+    movementPatterns: ['elbow_flexion'],
+    equipment: 'dumbbells',
+    difficulty: 'Beginner',
+    impactLevel: 'low',
+    defaultSets: 3,
+    defaultReps: '12',
+    restSeconds: 45,
+    instructions: 'Curl dumbbells upward while keeping elbows pinned close to torso. Lower under control.',
+    contraindications: ['elbow', 'wrist'],
+    safeAlternatives: ['hammer_curls']
   },
   {
     id: 'overhead_shoulder_press',
     name: 'Dumbbell Overhead Shoulder Press',
     targetMuscles: ['Deltoids', 'Triceps'],
-    equipment: 'Dumbbells',
+    jointsInvolved: ['shoulder', 'elbow'],
+    movementPatterns: ['vertical_push'],
+    equipment: 'dumbbells',
     difficulty: 'Intermediate',
+    impactLevel: 'low',
     defaultSets: 3,
     defaultReps: '10-12',
     restSeconds: 90,
-    instructions: 'Press dumbbells vertically upward until arms are extended overhead. Avoid arching lower back.',
-    restrictedForInjuries: ['rotator_cuff_tear', 'shoulder_impingement']
+    instructions: 'Press dumbbells vertically upward until arms extend overhead. Keep ribs down.',
+    contraindications: ['shoulder', 'rotator_cuff', 'neck'],
+    safeAlternatives: ['lateral_raises', 'dumbbell_floor_press']
   },
+
+  // --- CORE & POSTERIOR CHAIN (KNEE-SAFE) ---
   {
-    id: 'mountain_climbers',
-    name: 'Mountain Climbers',
-    targetMuscles: ['Core', 'Cardiovascular', 'Hip Flexors'],
-    equipment: 'Bodyweight',
+    id: 'plank',
+    name: 'Standard Forearm Plank',
+    targetMuscles: ['Core', 'Transverse Abdominis', 'Shoulders'],
+    jointsInvolved: ['shoulder', 'spine'],
+    movementPatterns: ['core_anti_extension'],
+    equipment: 'bodyweight',
     difficulty: 'Beginner',
+    impactLevel: 'low',
     defaultSets: 3,
-    defaultReps: '30 sec',
+    defaultReps: '45-60 sec',
     restSeconds: 45,
-    instructions: 'In high plank, alternately drive knees towards chest at a rhythmic, controlled pace.',
-    restrictedForInjuries: ['wrist_pain']
+    instructions: 'Brace core and squeeze glutes on forearms and toes. Maintain flat neutral spine.',
+    contraindications: ['lower_back', 'shoulder'],
+    safeAlternatives: ['dead_bug', 'bird_dog']
   },
   {
     id: 'bird_dog',
     name: 'Bird Dog Core Stabilization',
     targetMuscles: ['Lower Back', 'Glutes', 'Core'],
-    equipment: 'Bodyweight',
+    jointsInvolved: ['hip', 'shoulder', 'spine'],
+    movementPatterns: ['core_anti_rotation'],
+    equipment: 'bodyweight',
     difficulty: 'Beginner',
+    impactLevel: 'low',
     defaultSets: 3,
     defaultReps: '10 each side',
     restSeconds: 30,
-    instructions: 'On hands and knees, extend opposite arm and leg straight out while maintaining a neutral spine.',
-    restrictedForInjuries: []
+    instructions: 'On hands and knees, extend opposite arm and leg straight out with zero spinal rotation.',
+    contraindications: ['wrist'],
+    safeAlternatives: ['dead_bug']
+  },
+  {
+    id: 'dead_bug',
+    name: 'Dead Bug Core Press',
+    targetMuscles: ['Deep Core', 'Transverse Abdominis'],
+    jointsInvolved: ['hip', 'shoulder'],
+    movementPatterns: ['core_anti_extension'],
+    equipment: 'bodyweight',
+    difficulty: 'Beginner',
+    impactLevel: 'low',
+    defaultSets: 3,
+    defaultReps: '12 alternating',
+    restSeconds: 30,
+    instructions: 'Lie on back, knees at 90 degrees. Lower opposite arm and leg while pressing lower back firmly into floor.',
+    contraindications: [],
+    safeAlternatives: []
+  },
+  {
+    id: 'glute_bridges',
+    name: 'Glute Bridges (Knee-Friendly Hip Extension)',
+    targetMuscles: ['Glutes', 'Hamstrings'],
+    jointsInvolved: ['hip'],
+    movementPatterns: ['hip_extension'],
+    equipment: 'bodyweight',
+    difficulty: 'Beginner',
+    impactLevel: 'low',
+    defaultSets: 3,
+    defaultReps: '15',
+    restSeconds: 45,
+    instructions: 'Lie on back with knees bent at 90 degrees. Drive through heels to raise hips to full extension without pushing through toes.',
+    contraindications: ['lower_back_acute'],
+    safeAlternatives: ['prone_glute_kickback']
+  },
+
+  // --- LOWER BODY EXERCISES (EXPLICIT CONTRAINDICATIONS FOR KNEE INJURIES) ---
+  {
+    id: 'bodyweight_squats',
+    name: 'Bodyweight Squats',
+    targetMuscles: ['Quadriceps', 'Glutes', 'Hamstrings'],
+    jointsInvolved: ['knee', 'hip', 'ankle'],
+    movementPatterns: ['knee_flexion', 'knee_loading', 'squat'],
+    equipment: 'bodyweight',
+    difficulty: 'Beginner',
+    impactLevel: 'moderate',
+    defaultSets: 3,
+    defaultReps: '15-20',
+    restSeconds: 60,
+    instructions: 'Feet shoulder-width apart. Hinge hips back and bend knees to parallel. Drive up through midfoot.',
+    contraindications: ['knee', 'patella', 'meniscus', 'acl', 'quadriceps_tendon'],
+    safeAlternatives: ['glute_bridges', 'bird_dog']
+  },
+  {
+    id: 'lunges',
+    name: 'Walking Lunges',
+    targetMuscles: ['Quadriceps', 'Glutes', 'Calves'],
+    jointsInvolved: ['knee', 'hip', 'ankle'],
+    movementPatterns: ['knee_flexion', 'knee_loading', 'lunge'],
+    equipment: 'bodyweight',
+    difficulty: 'Intermediate',
+    impactLevel: 'moderate',
+    defaultSets: 3,
+    defaultReps: '10 per leg',
+    restSeconds: 60,
+    instructions: 'Step forward and lower back knee towards floor. Front shin remains vertical.',
+    contraindications: ['knee', 'patella', 'meniscus', 'acl'],
+    safeAlternatives: ['glute_bridges', 'dead_bug']
+  },
+  {
+    id: 'bulgarian_split_squat',
+    name: 'Bulgarian Split Squats',
+    targetMuscles: ['Quadriceps', 'Glutes'],
+    jointsInvolved: ['knee', 'hip'],
+    movementPatterns: ['knee_flexion', 'knee_loading', 'lunge'],
+    equipment: 'bench',
+    difficulty: 'Advanced',
+    impactLevel: 'moderate',
+    defaultSets: 3,
+    defaultReps: '8 per leg',
+    restSeconds: 60,
+    instructions: 'Rear foot elevated on bench. Lower hips until front thigh is parallel to ground.',
+    contraindications: ['knee', 'patella', 'meniscus', 'acl'],
+    safeAlternatives: ['glute_bridges', 'chest_supported_row']
+  },
+  {
+    id: 'jumping_jacks',
+    name: 'Jumping Jacks',
+    targetMuscles: ['Calves', 'Cardiovascular', 'Deltoids'],
+    jointsInvolved: ['knee', 'ankle', 'shoulder'],
+    movementPatterns: ['high_impact', 'jumping'],
+    equipment: 'bodyweight',
+    difficulty: 'Beginner',
+    impactLevel: 'high',
+    defaultSets: 3,
+    defaultReps: '30 sec',
+    restSeconds: 30,
+    instructions: 'Jump feet outward while bringing arms overhead. Jump back to center.',
+    contraindications: ['knee', 'ankle', 'lower_back', 'foot'],
+    safeAlternatives: ['step_jacks_low_impact', 'shadow_boxing']
+  },
+  {
+    id: 'mountain_climbers',
+    name: 'Mountain Climbers',
+    targetMuscles: ['Core', 'Hip Flexors', 'Cardiovascular'],
+    jointsInvolved: ['knee', 'hip', 'wrist', 'shoulder'],
+    movementPatterns: ['knee_flexion', 'knee_loading', 'high_cadence'],
+    equipment: 'bodyweight',
+    difficulty: 'Intermediate',
+    impactLevel: 'moderate',
+    defaultSets: 3,
+    defaultReps: '30 sec',
+    restSeconds: 45,
+    instructions: 'In high plank position, rapidly drive knees alternately towards chest.',
+    contraindications: ['knee', 'wrist', 'hip'],
+    safeAlternatives: ['plank', 'dead_bug']
+  },
+  {
+    id: 'box_jumps',
+    name: 'Plyometric Box Jumps',
+    targetMuscles: ['Quadriceps', 'Glutes', 'Calves'],
+    jointsInvolved: ['knee', 'ankle', 'hip'],
+    movementPatterns: ['high_impact', 'jumping', 'knee_loading'],
+    equipment: 'bench',
+    difficulty: 'Advanced',
+    impactLevel: 'high',
+    defaultSets: 3,
+    defaultReps: '8-10',
+    restSeconds: 90,
+    instructions: 'Jump explosively onto elevated box, landing softly in partial squat.',
+    contraindications: ['knee', 'ankle', 'patella', 'meniscus', 'acl', 'lower_back'],
+    safeAlternatives: ['glute_bridges', 'dumbbell_floor_press']
+  },
+  {
+    id: 'leg_press',
+    name: 'Machine Leg Press',
+    targetMuscles: ['Quadriceps', 'Glutes'],
+    jointsInvolved: ['knee', 'hip'],
+    movementPatterns: ['knee_flexion', 'knee_loading'],
+    equipment: 'gym',
+    difficulty: 'Intermediate',
+    impactLevel: 'moderate',
+    defaultSets: 3,
+    defaultReps: '10-12',
+    restSeconds: 90,
+    instructions: 'Push footplate away until legs extend without hyperextending knees.',
+    contraindications: ['knee', 'patella', 'meniscus', 'acl', 'lower_back'],
+    safeAlternatives: ['glute_bridges', 'seated_resistance_band_row']
+  },
+  {
+    id: 'step_jacks_low_impact',
+    name: 'Low-Impact Step Jacks',
+    targetMuscles: ['Cardiovascular', 'Shoulders'],
+    jointsInvolved: ['shoulder'],
+    movementPatterns: ['low_impact_cardio'],
+    equipment: 'bodyweight',
+    difficulty: 'Beginner',
+    impactLevel: 'low',
+    defaultSets: 3,
+    defaultReps: '45 sec',
+    restSeconds: 30,
+    instructions: 'Step one foot out at a time without jumping while swinging arms overhead. Zero impact on knees.',
+    contraindications: [],
+    safeAlternatives: []
   }
 ];
 
-// Generates an injury-safe workout circuit
-const getSafeExercisesForProfile = (profile, count = 4) => {
-  const injuries = (profile && profile.injuries) || [];
-  const injuryTerms = injuries.flatMap(inj => [
-    inj.bodyPart ? inj.bodyPart.toLowerCase() : '',
-    ...(inj.movementsToAvoid || []).map(m => m.toLowerCase())
-  ]).filter(Boolean);
-
-  const safeList = EXERCISE_DATABASE.filter(ex => {
-    // Check if any injury restriction applies
-    for (const term of injuryTerms) {
-      if (ex.name.toLowerCase().includes(term)) return false;
-      for (const m of ex.targetMuscles) {
-        if (m.toLowerCase().includes(term)) return false;
-      }
-      for (const r of ex.restrictedForInjuries) {
-        if (r.toLowerCase().includes(term) || term.includes(r.toLowerCase())) return false;
-      }
-    }
-    return true;
-  });
-
-  return safeList.slice(0, count).map(ex => ({
-    name: ex.name,
-    sets: ex.defaultSets,
-    reps: ex.defaultReps,
-    restSeconds: ex.restSeconds,
-    targetMuscles: ex.targetMuscles,
-    instructions: ex.instructions,
-    equipment: ex.equipment,
-    completed: false
-  }));
-};
-
 module.exports = {
-  EXERCISE_DATABASE,
-  getSafeExercisesForProfile
+  EXERCISE_DATABASE
 };
