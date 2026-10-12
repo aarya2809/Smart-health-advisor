@@ -16,7 +16,7 @@ const generateChatResponse = async (req, res) => {
     const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
     
     const profile = await HealthProfile.findOne({ user: req.user._id });
-    let systemInstruction = "You are a professional, empathetic, and knowledgeable personal trainer and nutritionist AI called 'Smart Health Advisor'. Give concise, practical advice.";
+    let systemInstruction = "You are a professional, empathetic, and knowledgeable personal trainer and nutritionist AI called 'AdaptFit AI'. Your motto is 'Plans That Adapt to Your Life.' Give concise, practical advice.";
     
     if (profile) {
       // Compute authoritative targets for AI context

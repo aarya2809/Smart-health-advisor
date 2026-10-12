@@ -32,7 +32,7 @@ const healthCheckHandler = (req, res) => {
   res.status(isDbConnected ? 200 : 503).json({
     success: isDbConnected,
     status: isDbConnected ? "ok" : "degraded",
-    message: "Smart Health Advisor API is running",
+    message: "AdaptFit AI API is running",
     database: isDbConnected ? "connected" : "disconnected",
     timestamp: new Date().toISOString(),
     uptime: Math.round(process.uptime()),
@@ -46,7 +46,7 @@ app.get("/api/health", healthCheckHandler);
 app.get("/", (req, res) => {
   res.status(200).json({
     success: true,
-    message: "Smart Health Advisor API is running",
+    message: "AdaptFit AI API is running",
     docs: "/api/health",
   });
 });
