@@ -71,6 +71,21 @@ const trackingLogSchema = new mongoose.Schema({
     type: String,
     default: ''
   },
+  cardioCompleted: {
+    type: Boolean,
+    default: false
+  },
+  cardioLogs: [{
+    activityType: { type: String, required: true },
+    durationMinutes: { type: Number, default: 0 },
+    distanceKm: { type: Number, default: 0 },
+    paceMinPerKm: Number,
+    perceivedEffort: { type: Number, min: 1, max: 10 },
+    estimatedCalories: Number,
+    notes: String,
+    completed: { type: Boolean, default: true },
+    loggedAt: { type: Date, default: Date.now }
+  }],
   sleepHours: {
     type: Number,
     default: 0

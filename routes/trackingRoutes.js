@@ -10,6 +10,7 @@ const {
   logWorkout,
   logSleep,
   logWeight,
+  logCardio,
   getHistory
 } = require('../controllers/trackingController');
 
@@ -21,6 +22,7 @@ router.post('/food/compute', computeFoodNutrition);
 router.post('/meal', logMeal);
 router.post('/water', updateWater);
 router.post('/workout', logWorkout);
+router.post('/cardio', logCardio);
 router.post('/sleep', logSleep);
 router.post('/weight', logWeight);
 router.get('/history', getHistory);

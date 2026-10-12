@@ -1,6 +1,7 @@
 const TrackingLog = require('../models/TrackingLog');
 const HealthProfile = require('../models/HealthProfile');
 const { searchFoods, calculateNutrition } = require('../utils/nutritionDatabase');
+const { CARDIO_ACTIVITIES } = require('../utils/cardioEngine');
 
 // Helper to get local date string YYYY-MM-DD
 const getTodayDateString = () => {
@@ -266,6 +267,69 @@ const getHistory = async (req, res) => {
   }
 };
 
+const logCardio = async (req, res) => {
+  try {
+    const {
+      date,
+      activityType,
+      durationMinutes,
+      distanceKm,
+      paceMinPerKm,
+      perceivedEffort,
+      notes
+    } = req.body;
+
+    if (!activityType) {
+      return res.status(400).json({ success: false, message: 'Activity type is required' });
+    }
+
+    const logDate = date || getTodayDateString();
+    let log = await TrackingLog.findOne({ user: req.user._id, date: logDate });
+    if (!log) {
+      log = new TrackingLog({ user: req.user._id, date: logDate });
+    }
+
+    const duration = Number(durationMinutes) || 20;
+    const profile = await HealthProfile.findOne({ user: req.user._id });
+    const weight = (profile && profile.weight) ? profile.weight : 70;
+
+    // ACSM MET lookup for calorie estimation
+    const act = CARDIO_ACTIVITIES.find(a => a.name.toLowerCase() === activityType.toLowerCase() || a.id === activityType.toLowerCase());
+    const met = act ? act.met : 4.5;
+    const estimatedCalories = Math.round(met * weight * (duration / 60));
+
+    const newCardioEntry = {
+      activityType: act ? act.name : activityType,
+      durationMinutes: duration,
+      distanceKm: Number(distanceKm) || 0,
+      paceMinPerKm: Number(paceMinPerKm) || 0,
+      perceivedEffort: perceivedEffort ? Number(perceivedEffort) : undefined,
+      estimatedCalories,
+      notes: notes || '',
+      completed: true,
+      loggedAt: new Date()
+    };
+
+    if (!Array.isArray(log.cardioLogs)) {
+      log.cardioLogs = [];
+    }
+    log.cardioLogs.push(newCardioEntry);
+    log.cardioCompleted = true;
+
+    await log.save();
+
+    res.status(200).json({
+      success: true,
+      cardioLog: newCardioEntry,
+      log,
+      message: 'Cardio session recorded successfully'
+    });
+  } catch (error) {
+    console.error('logCardio error:', error);
+    res.status(500).json({ success: false, message: 'Server error logging cardio' });
+  }
+};
+
 module.exports = {
   getTodayLog,
   searchFoodItems,
@@ -275,5 +339,6 @@ module.exports = {
   logWorkout,
   logSleep,
   logWeight,
+  logCardio,
   getHistory
 };

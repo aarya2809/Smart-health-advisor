@@ -261,9 +261,131 @@ function sanitizeWorkoutPlan(plan, profile) {
   };
 }
 
+/**
+ * Adapts an existing workout plan to a new location (e.g., Gym -> Home or Home -> Gym)
+ * Replaces equipment-incompatible exercises with available, injury-safe alternatives.
+ */
+function adaptWorkoutPlanForLocation(plan, targetLocation = 'home', userAvailableEquipment = [], profile = null) {
+  if (!plan || !Array.isArray(plan.exercises)) {
+    return { adaptedPlan: plan, replacementsCount: 0, notes: [] };
+  }
+
+  const notes = [];
+  let replacementsCount = 0;
+  const oldLocation = plan.location || 'gym';
+
+  // Determine permitted equipment set for the target location
+  const isGym = targetLocation === 'gym';
+  const isBodyweight = targetLocation === 'bodyweight';
+  const isOutdoor = targetLocation === 'outdoor';
+
+  const defaultHomeEquip = ['dumbbells', 'bodyweight', 'resistance_band', 'floor'];
+  const userEquip = (userAvailableEquipment && userAvailableEquipment.length > 0)
+    ? userAvailableEquipment
+    : (profile?.homeEquipment || defaultHomeEquip);
+
+  // Helper to check if an exercise is allowed by equipment at target location
+  const isEquipmentAvailable = (ex) => {
+    if (isGym) return true; // Gym has all standard equipment
+    const dbMatch = EXERCISE_DATABASE.find(e => e.name.toLowerCase() === (ex.name || '').toLowerCase());
+    const equip = (ex.equipment || (dbMatch && dbMatch.equipment) || 'bodyweight').toLowerCase();
+
+    if (isBodyweight) {
+      return equip === 'bodyweight' || equip === 'none';
+    }
+    if (isOutdoor) {
+      return equip === 'bodyweight' || equip === 'none' || equip === 'running';
+    }
+    // Target location is Home
+    if (equip === 'gym' || equip === 'machine' || equip === 'cable' || equip === 'cables') {
+      return false; // Standard home lacks commercial cable machines and leg presses
+    }
+    if (equip === 'barbell' && !userEquip.includes('barbells') && !userEquip.includes('barbell')) {
+      return false;
+    }
+    if (equip === 'bench' && !userEquip.includes('bench')) {
+      return false;
+    }
+    return true;
+  };
+
+  const adaptedExercises = plan.exercises.map(ex => {
+    // 1. Check if exercise is already valid for equipment and injury
+    const equipOk = isEquipmentAvailable(ex);
+    const safetyCheck = isExerciseSafeForProfile(ex, profile);
+
+    if (equipOk && safetyCheck.safe) {
+      return ex;
+    }
+
+    // 2. Needs replacement
+    replacementsCount++;
+    const reason = !equipOk
+      ? `Requires gym equipment unavailable for ${targetLocation} session`
+      : safetyCheck.reason;
+
+    // Find candidate matching target location equipment AND passing injury check
+    const candidate = EXERCISE_DATABASE.find(candidateEx => {
+      // Must be safe for injury
+      if (!isExerciseSafeForProfile(candidateEx, profile).safe) return false;
+      // Must be compatible with target location equipment
+      if (!isEquipmentAvailable(candidateEx)) return false;
+      // Should not be identical to existing exercises
+      const alreadyInPlan = plan.exercises.some(e => e.name.toLowerCase() === candidateEx.name.toLowerCase());
+      return !alreadyInPlan;
+    }) || EXERCISE_DATABASE.find(c => isEquipmentAvailable(c) && isExerciseSafeForProfile(c, profile).safe);
+
+    if (candidate) {
+      const note = `Adapted '${ex.name}' -> '${candidate.name}' (${reason})`;
+      notes.push(note);
+
+      return {
+        name: candidate.name,
+        sets: ex.sets || candidate.defaultSets,
+        reps: ex.reps || candidate.defaultReps,
+        restSeconds: ex.restSeconds || candidate.restSeconds,
+        equipment: candidate.equipment,
+        targetMuscles: candidate.targetMuscles,
+        instructions: candidate.instructions,
+        safetySubstituted: true,
+        originalExercise: ex.name,
+        substitutionReason: reason,
+        completed: false
+      };
+    }
+
+    return ex;
+  });
+
+  const adjustmentEntry = {
+    timestamp: new Date(),
+    fromLocation: oldLocation,
+    toLocation: targetLocation,
+    reason: `Switched location to ${targetLocation} (${replacementsCount} exercises adapted)`
+  };
+
+  const existingHistory = Array.isArray(plan.adjustmentHistory) ? plan.adjustmentHistory : [];
+
+  const adaptedPlan = {
+    ...plan.toObject ? plan.toObject() : plan,
+    location: targetLocation,
+    exercises: adaptedExercises,
+    adjustmentHistory: [...existingHistory, adjustmentEntry],
+    safetyAuditPassed: true,
+    safetyNotes: [...(plan.safetyNotes || []), ...notes]
+  };
+
+  return {
+    adaptedPlan,
+    replacementsCount,
+    notes
+  };
+}
+
 module.exports = {
   extractUserInjuryTerms,
   isExerciseSafeForProfile,
   getSafeExercisesForProfile,
-  sanitizeWorkoutPlan
+  sanitizeWorkoutPlan,
+  adaptWorkoutPlanForLocation
 };

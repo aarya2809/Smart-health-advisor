@@ -2,7 +2,8 @@ const HealthProfile = require('../models/HealthProfile');
 const DietPlan = require('../models/DietPlan');
 const WorkoutPlan = require('../models/WorkoutPlan');
 const { validateDietPlan, validateWorkoutPlan } = require('../utils/safetyValidator');
-const { getSafeExercisesForProfile, sanitizeWorkoutPlan, isExerciseSafeForProfile } = require('../utils/injuryEngine');
+const { getSafeExercisesForProfile, sanitizeWorkoutPlan, isExerciseSafeForProfile, adaptWorkoutPlanForLocation } = require('../utils/injuryEngine');
+const { generateCardioPrescription } = require('../utils/cardioEngine');
 const { searchFoods } = require('../utils/nutritionDatabase');
 const { calculateBMR, calculateTDEE } = require('../utils/metricsCalculator');
 const { calculateIndividualizedTargets } = require('../utils/proteinCalculator');
@@ -250,12 +251,46 @@ Respond ONLY with a raw JSON object (no markdown, no backticks) exactly matching
       estimatedDuration = 40;
     }
 
+    // Determine initial workout location from weekly schedule or profile preference
+    const dayOfWeek = queryDate.getUTCDay();
+    const scheduledDay = (profile.weeklySchedule || []).find(s => s.dayOfWeek === dayOfWeek);
+    let workoutLocation = 'gym';
+    if (scheduledDay && scheduledDay.preferredLocation && scheduledDay.preferredLocation !== 'flexible') {
+      workoutLocation = scheduledDay.preferredLocation;
+    } else if (profile.workoutLocationPreference && profile.workoutLocationPreference !== 'flexible') {
+      workoutLocation = profile.workoutLocationPreference;
+    } else if (!profile.accessToGym) {
+      workoutLocation = 'home';
+    }
+
+    const availableEquipment = workoutLocation === 'home'
+      ? (profile.homeEquipment || ['dumbbells', 'bodyweight'])
+      : (profile.gymEquipment || ['barbells', 'dumbbells', 'machines', 'cables']);
+
+    // Auto-generate individualized cardio if goal is fat loss or endurance
+    let cardioActivity = null;
+    let isCardioIncluded = false;
+    if (profile.primaryGoal === 'lose_fat' || profile.primaryGoal === 'improve_endurance' || profile.cardioPreference?.frequencyDaysPerWeek > 0) {
+      cardioActivity = generateCardioPrescription({
+        goal: profile.primaryGoal,
+        weightKg: profile.weight || 70,
+        location: workoutLocation,
+        availableEquipment,
+        profile
+      });
+      isCardioIncluded = true;
+    }
+
     const planData = {
       user: req.user._id,
       date: queryDate,
       objective,
+      location: workoutLocation,
+      availableEquipment,
       estimatedDuration,
       exercises,
+      isCardioIncluded,
+      cardioActivity,
       safetyAuditPassed: true
     };
 
@@ -269,7 +304,6 @@ Respond ONLY with a raw JSON object (no markdown, no backticks) exactly matching
     }
 
     const newPlan = await WorkoutPlan.create(planData);
-    res.status(201).json({ success: true, plan: newPlan });
     res.status(201).json({ success: true, plan: newPlan });
   } catch (error) {
     console.error('generateWorkoutPlan error:', error);
@@ -402,10 +436,114 @@ const updatePlanDetails = async (req, res) => {
   }
 };
 
+// Switch Workout Location (e.g., Gym -> Home -> Outdoor -> Bodyweight)
+const switchWorkoutLocation = async (req, res) => {
+  try {
+    const { planId, targetLocation, equipment } = req.body;
+    if (!targetLocation) {
+      return res.status(400).json({ success: false, message: 'Target location is required' });
+    }
+
+    const query = { user: req.user._id };
+    if (planId) {
+      query._id = planId;
+    }
+
+    const plan = await WorkoutPlan.findOne(query).sort({ date: -1 });
+    if (!plan) {
+      return res.status(404).json({ success: false, message: 'Workout plan not found' });
+    }
+
+    const profile = await HealthProfile.findOne({ user: req.user._id });
+    const { adaptedPlan, replacementsCount, notes } = adaptWorkoutPlanForLocation(
+      plan,
+      targetLocation,
+      equipment,
+      profile
+    );
+
+    plan.location = targetLocation;
+    plan.exercises = adaptedPlan.exercises;
+    plan.adjustmentHistory = adaptedPlan.adjustmentHistory;
+    plan.safetyAuditPassed = true;
+    plan.safetyNotes = adaptedPlan.safetyNotes;
+
+    // Adapt or maintain cardio activity for target location
+    if (plan.isCardioIncluded || profile?.primaryGoal === 'lose_fat') {
+      const cardio = generateCardioPrescription({
+        goal: profile?.primaryGoal || 'general_fitness',
+        weightKg: profile?.weight || 70,
+        location: targetLocation,
+        availableEquipment: equipment,
+        profile
+      });
+      plan.cardioActivity = cardio;
+      plan.isCardioIncluded = true;
+    }
+
+    await plan.save();
+
+    res.status(200).json({
+      success: true,
+      plan,
+      replacementsCount,
+      notes,
+      message: `Workout adapted for ${targetLocation} session successfully`
+    });
+  } catch (error) {
+    console.error('switchWorkoutLocation error:', error);
+    res.status(500).json({ success: false, message: 'Server error switching workout location' });
+  }
+};
+
+// Add or Customize Cardio on Workout Plan
+const addCardioToPlan = async (req, res) => {
+  try {
+    const { planId, activityType, durationMinutes } = req.body;
+
+    const query = { user: req.user._id };
+    if (planId) {
+      query._id = planId;
+    }
+
+    const plan = await WorkoutPlan.findOne(query).sort({ date: -1 });
+    if (!plan) {
+      return res.status(404).json({ success: false, message: 'Workout plan not found' });
+    }
+
+    const profile = await HealthProfile.findOne({ user: req.user._id });
+    const cardio = generateCardioPrescription({
+      goal: profile?.primaryGoal || 'general_fitness',
+      weightKg: profile?.weight || 70,
+      location: plan.location || 'gym',
+      availableEquipment: plan.availableEquipment,
+      profile,
+      preferredActivity: activityType,
+      durationMinutes
+    });
+
+    plan.cardioActivity = cardio;
+    plan.isCardioIncluded = true;
+    await plan.save();
+
+    res.status(200).json({
+      success: true,
+      plan,
+      cardioActivity: plan.cardioActivity,
+      message: 'Cardio routine added to workout plan'
+    });
+  } catch (error) {
+    console.error('addCardioToPlan error:', error);
+    res.status(500).json({ success: false, message: 'Server error adding cardio to plan' });
+  }
+};
+
 module.exports = {
   generateDietPlan,
   generateWorkoutPlan,
   updateDietMealStatus,
   updateWorkoutStatus,
-  updatePlanDetails
+  updatePlanDetails,
+  switchWorkoutLocation,
+  addCardioToPlan
 };

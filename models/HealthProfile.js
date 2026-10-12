@@ -56,7 +56,42 @@ const healthProfileSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  workoutLocationPreference: {
+    type: String,
+    enum: ['gym', 'home', 'outdoor', 'bodyweight', 'flexible'],
+    default: 'flexible'
+  },
   availableEquipment: [String],
+  homeEquipment: {
+    type: [String],
+    default: ['dumbbells', 'bodyweight']
+  },
+  gymEquipment: {
+    type: [String],
+    default: ['barbells', 'dumbbells', 'machines', 'cables', 'benches']
+  },
+  weeklySchedule: [{
+    dayOfWeek: Number, // 0 = Sunday, 1 = Monday, ...
+    dayName: String, // 'Monday', 'Tuesday', ...
+    preferredLocation: {
+      type: String,
+      enum: ['gym', 'home', 'outdoor', 'bodyweight', 'rest'],
+      default: 'flexible'
+    },
+    isRestDay: {
+      type: Boolean,
+      default: false
+    },
+    targetDurationMinutes: {
+      type: Number,
+      default: 45
+    }
+  }],
+  cardioPreference: {
+    preferredActivities: [String],
+    frequencyDaysPerWeek: { type: Number, default: 3 },
+    lowImpactOnly: { type: Boolean, default: false }
+  },
   exerciseExperience: {
     type: String,
     enum: ['beginner', 'intermediate', 'advanced'],
